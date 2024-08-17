@@ -1,18 +1,17 @@
 #+title: Emacs Config
 #+author: Williams Parre
-#+startup: indent overview
+#+startup: indent showall 
 
 * Table Of Contents :toc:
 - [[#emacs-startup-performance][Emacs Startup Performance]]
 - [[#package-manager][Package Manager]]
 - [[#wrapper-using-package-vc][Wrapper using package-vc]]
-- [[#automatic-package-updates][Automatic Package Updates]]
 - [[#garbage-collection-magic-hack-package][Garbage Collection Magic Hack Package]]
 - [[#basic-settings][Basic Settings]]
   - [[#defaults][Defaults]]
   - [[#electric-configuration][Electric Configuration]]
   - [[#custom-requirements][Custom Requirements]]
-- [[#ef-themes][Ef Themes]]
+- [[#themes][Themes]]
 - [[#customization-of-frame-alist][Customization of Frame Alist]]
 - [[#evil-mode][Evil Mode]]
 - [[#whichkey][WhichKey]]
@@ -51,6 +50,7 @@
   - [[#nerd-icons-for-dired][Nerd Icons For Dired]]
   - [[#scale-adjustment][Scale Adjustment]]
 - [[#custom-vars-setting][Custom Vars Setting]]
+- [[#centaur-tabs][Centaur Tabs]]
 
 * Emacs Startup Performance
 #+begin_src emacs-lisp
@@ -69,25 +69,53 @@
 * Package Manager
 #+begin_src emacs-lisp
 
-;; Initialize package sources
-(require 'package)
+(defvar elpaca-installer-version 0.7)
+(defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
+(defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
+(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+(defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
+                              :ref nil :depth 1
+                              :files (:defaults "elpaca-test.el" (:exclude "extensions"))
+                              :build (:not elpaca--activate-package)))
+(let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+       (build (expand-file-name "elpaca/" elpaca-builds-directory))
+       (order (cdr elpaca-order))
+       (default-directory repo))
+  (add-to-list 'load-path (if (file-exists-p build) build repo))
+  (unless (file-exists-p repo)
+    (make-directory repo t)
+    (when (< emacs-major-version 28) (require 'subr-x))
+    (condition-case-unless-debug err
+        (if-let ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
+                 ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
+                                                 ,@(when-let ((depth (plist-get order :depth)))
+                                                     (list (format "--depth=%d" depth) "--no-single-branch"))
+                                                 ,(plist-get order :repo) ,repo))))
+                 ((zerop (call-process "git" nil buffer t "checkout"
+                                       (or (plist-get order :ref) "--"))))
+                 (emacs (concat invocation-directory invocation-name))
+                 ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
+                                       "--eval" "(byte-recompile-directory \".\" 0 'force)")))
+                 ((require 'elpaca))
+                 ((elpaca-generate-autoloads "elpaca" repo)))
+            (progn (message "%s" (buffer-string)) (kill-buffer buffer))
+          (error "%s" (with-current-buffer buffer (buffer-string))))
+      ((error) (warn "%s" err) (delete-directory repo 'recursive))))
+  (unless (require 'elpaca-autoloads nil t)
+    (require 'elpaca)
+    (elpaca-generate-autoloads "elpaca" repo)
+    (load "./elpaca-autoloads")))
+(add-hook 'after-init-hook #'elpaca-process-queues)
+(elpaca `(,@elpaca-order))
 
-(setq package-archives '(("melpa" . "https://melpa.org/packages/")
-			 ("org" . "https://orgmode.org/elpa/")
-			 ("gnu-devel" . "https://elpa.gnu.org/devel/")
-			 ("elpa" . "https://elpa.gnu.org/packages/")))
+;; Uncomment for systems which cannot create symlinks:
+(elpaca-no-symlink-mode)
 
-(package-initialize)
-
-(unless package-archive-contents
-  (package-refresh-contents))
-
-;; Initialize use-package on non-Linux platforms
-(unless (package-installed-p 'use-package)
-  (package-install 'use-package))
-
-(require 'use-package)
-(setq use-package-always-ensure t)
+;; Install use-package support
+(elpaca elpaca-use-package
+  ;; Enable use-package :ensure support for Elpaca.
+  (elpaca-use-package-mode)
+  (setq elpaca-use-package-by-default t))
 
 #+end_src
 
@@ -113,20 +141,6 @@ named arguments:
          (pac-name (or iname (intern (file-name-base repo)))))
     (unless (package-installed-p pac-name)
       (package-vc-install url iname rev backend))))
-
-#+end_src
-
-* Automatic Package Updates
-#+begin_src emacs-lisp
-
-(use-package auto-package-update
-  :custom
-  (auto-package-update-interval 7)
-  (auto-package-update-prompt-before-update t)
-  (auto-package-update-hide-results t)
-  :config
-  (auto-package-update-maybe)
-  (auto-package-update-at-time "09:00"))
 
 #+end_src
 
@@ -200,12 +214,18 @@ named arguments:
 
 #+end_src
 
-* Ef Themes
+* Themes
 #+begin_src emacs-lisp
 
 (use-package ef-themes
   :config
-  (load-theme 'ef-bio t))
+  (load-theme 'ef-bio t)
+  )
+
+(use-package catppuccin-theme
+  ;; :config
+  ;; (load-theme 'catppuccin t)
+  )
 
 #+end_src
 
@@ -283,9 +303,6 @@ named arguments:
 
 #+end_src
 
-#+RESULTS:
-: t
-
 * WhichKey
 #+begin_src emacs-lisp
 
@@ -329,6 +346,7 @@ named arguments:
 ;;   (setq vertico-posframe-min-width 100))
 
 (use-package savehist
+  :ensure nil
   :init
   (savehist-mode)
   :config
@@ -373,6 +391,7 @@ named arguments:
 #+begin_src emacs-lisp
 
 (use-package general
+  :ensure (:wait t)
   :config
   (general-evil-setup)
 
@@ -422,7 +441,7 @@ named arguments:
     "d t" '(treemacs-select-directory :wk "Open directory in Treemacs"))
 
   (wk/leader-keys
-    "e" '(:ignore t :wk "Eshell/Evaluate")
+    "e" '(:ignore t :wk "Evaluate")
     "e b" '(eval-buffer :wk "Evaluate elisp in buffer")
     "e d" '(eval-defun :wk "Evaluate defun containing or after point")
     "e e" '(eval-expression :wk "Evaluate and elisp expression")
@@ -531,7 +550,7 @@ named arguments:
   (wk/leader-keys
     "o" '(:ignore t :wk "Open")
     "o d" '(dashboard-open :wk "Dashboard")
-    "o e" '(toggle-term-eshell :which-key "Toggle Shell")
+    "o e" '(cmd :which-key "Toggle Shell")
     "o f" '(make-frame :wk "Open buffer in new frame")
     "o F" '(select-frame-by-name :wk "Select frame by name")
     "o p" '(treemacs :wk "Treemacs"))
@@ -606,40 +625,14 @@ named arguments:
 
 (defun custom/org-mode-setup ()
   (org-indent-mode)
-  (variable-pitch-mode 1)
   (visual-line-mode 1))
-
-(defun custom/org-font-setup ()
-  ;; Set faces for heading levels
-  (dolist (face '((org-level-1 . 1.2)
-                  (org-level-2 . 1.1)
-                  (org-level-3 . 1.05)
-                  (org-level-4 . 1.0)
-                  (org-level-5 . 1.1)
-                  (org-level-6 . 1.1)
-                  (org-level-7 . 1.1)
-                  (org-level-8 . 1.1)))
-    (set-face-attribute (car face) nil :font "CodeNewRoman Nerd Font" :weight 'regular :height (cdr face))
-    )
-
-  ;; Ensure that anything that should be fixed-pitch in Org files appears that way
-  (set-face-attribute 'org-block nil :foreground nil :inherit 'fixed-pitch)
-  (set-face-attribute 'org-code nil   :inherit '(shadow fixed-pitch))
-  (set-face-attribute 'org-table nil   :inherit '(shadow fixed-pitch))
-  (set-face-attribute 'org-verbatim nil :inherit '(shadow fixed-pitch))
-  (set-face-attribute 'org-special-keyword nil :inherit '(font-lock-comment-face fixed-pitch))
-  (set-face-attribute 'org-meta-line nil :inherit '(font-lock-comment-face fixed-pitch))
-  (set-face-attribute 'org-checkbox nil :inherit 'fixed-pitch))
 
 (use-package org
   :ensure nil
-  :hook (org-mode . custom/org-mode-setup)
-  :config
-  (custom/org-font-setup)
-  )
+  :hook (org-mode . custom/org-mode-setup))
 
-(use-package org-bullets
-  :hook (org-mode . org-bullets-mode))
+(use-package org-modern
+  :hook (org-mode . org-modern-mode))
 
 #+end_src
 
@@ -784,8 +777,7 @@ all directories except the one where this function is executed, if confirmed by 
 #+begin_src emacs-lisp
 
 (use-package rainbow-delimiters
-  :init
-  (rainbow-delimiters-mode))
+  :hook (prog-mode . rainbow-delimiters-mode))
 
 #+end_src
 
@@ -802,13 +794,14 @@ all directories except the one where this function is executed, if confirmed by 
 * Toggle-Term
 #+begin_src emacs-lisp
 
-(use-package toggle-term
-  :commands toggle-term-eshell
-  :config
-  (setq toggle-term-size 25)
-  (setq toggle-term-switch-upon-toggle t)
-  (setq toggle-term-default-shell 'eshell)
-  )
+(defun cmd()
+  "Open an external Windows cmd in the current directory"
+  (interactive)
+  (let ((default-directory
+         (if (buffer-file-name)
+             (file-name-directory (buffer-file-name))
+           default-directory))))
+  (call-process-shell-command "start cmd"))
 
 #+end_src
 
@@ -908,8 +901,19 @@ all directories except the one where this function is executed, if confirmed by 
 
 (use-package dired
   :ensure nil
-  ;; :hook (dired-mode . dired-hide-details-mode)
-  ) 
+  :commands (dired dired-jump)
+  :config
+  (evil-collection-define-key 'normal 'dired-mode-map
+    "h" 'dired-single-up-directory
+    "l" 'dired-single-buffer))
+
+(use-package dired-single)
+
+(use-package dired-hide-dotfiles
+  :hook (dired-mode . dired-hide-dotfiles-mode)
+  :config
+  (evil-collection-define-key 'normal 'dired-mode-map
+    "H" 'dired-hide-dotfiles-mode))
 
 #+end_src
 
@@ -980,3 +984,17 @@ all directories except the one where this function is executed, if confirmed by 
 
 #+end_src
 
+* Centaur Tabs
+#+begin_src emacs-lisp
+
+(use-package centaur-tabs
+  :custom
+  (centaur-tabs-set-icons t)
+  (centaur-tabs-height 45)
+  (centaur-tabs-set-bar 'under)
+  (x-underline-at-descent-line t)
+  (centaur-tabs-show-new-tab-button t)
+  (centaur-tabs-set-close-button nil)
+  (centaur-tabs-enable-ido-completion nil))
+
+#+end_src
