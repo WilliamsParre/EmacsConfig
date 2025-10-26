@@ -1,42 +1,3 @@
-#+title: Emacs Config
-#+author: Williams Parre
-#+startup: indent overview 
-
-* Table Of Contents :toc:
-- [[#package-manager][Package Manager]]
-- [[#wrapper-using-package-vc][Wrapper using package-vc]]
-- [[#basic-settings][Basic Settings]]
-  - [[#defaults][Defaults]]
-  - [[#electric-configuration][Electric Configuration]]
-  - [[#custom-requirements][Custom Requirements]]
-- [[#themes][Themes]]
-- [[#general-key-bindings][General Key Bindings]]
-- [[#customization-of-frame-alist][Customization of Frame Alist]]
-- [[#evil-mode][Evil Mode]]
-- [[#whichkey][WhichKey]]
-- [[#vertico][Vertico]]
-- [[#marginalia][Marginalia]]
-- [[#orderless][Orderless]]
-- [[#completion-framework][Completion Framework]]
-  - [[#corfu][Corfu]]
-  - [[#icons][Icons]]
-  - [[#documentation][Documentation]]
-- [[#consult][Consult]]
-- [[#org-mode-configuration][Org Mode Configuration]]
-  - [[#ui-customization][UI Customization]]
-  - [[#babel-configuration][Babel Configuration]]
-  - [[#structure-templates][Structure Templates]]
-- [[#latex-setup][Latex Setup]]
-- [[#yasnippets][YASnippets]]
-- [[#modeline][Modeline]]
-- [[#lsp][LSP]]
-- [[#format-all][Format All]]
-- [[#packages-to-enhance-prog-mode-ui][Packages to enhance Prog Mode UI]]
-- [[#flycheck][Flycheck]]
-
-* Package Manager
-#+begin_src emacs-lisp
-
 (defvar elpaca-installer-version 0.7)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
@@ -85,11 +46,6 @@
   (elpaca-use-package-mode)
   (setq elpaca-use-package-by-default t))
 
-#+end_src
-
-* Wrapper using package-vc
-#+begin_src emacs-lisp
-
 (cl-defun slot/vc-install (&key (fetcher "github") repo name rev backend)
   "Install a package from a remote if it's not already installed.
 This is a thin wrapper around `package-vc-install' in order to
@@ -109,12 +65,6 @@ named arguments:
          (pac-name (or iname (intern (file-name-base repo)))))
     (unless (package-installed-p pac-name)
       (package-vc-install url iname rev backend))))
-
-#+end_src
-
-* Basic Settings
-** Defaults
-#+begin_src emacs-lisp
 
 (setq inhibit-startup-message t)
 
@@ -150,18 +100,8 @@ named arguments:
   :config
   (exec-path-from-shell-initialize))
 
-#+end_src
-
-** Electric Configuration
-#+begin_src emacs-lisp
-
 (delete-selection-mode 1)    ;; You can select text and delete it by typing.
 (electric-indent-mode 1)    ;; Turn On/Off the indention that Emacs does by default.
-
-#+end_src
-
-** Custom Requirements
-#+begin_src emacs-lisp
 
 (use-package emacs
   :ensure nil
@@ -175,11 +115,6 @@ named arguments:
   :init
   (defun display-startup-echo-area-message ()
     (message "")))
-
-#+end_src
-
-* Themes
-#+begin_src emacs-lisp
 
 (use-package ef-themes
   ;; :config
@@ -217,11 +152,6 @@ named arguments:
 ;; Optional: if using org-mode, improve fontification
 (setq doom-themes-org-fontify-whole-heading-line t
       doom-themes-org-agenda-height 1.1)
-
-#+end_src
-
-* General Key Bindings
-#+begin_src emacs-lisp
 
 (use-package general
   :ensure (:wait t)
@@ -435,19 +365,9 @@ named arguments:
     "y n" '(yas-new-snippet :wk "Create new YASnippet"))
   )
 
-#+end_src
-
-* Customization of Frame Alist
-#+begin_src emacs-lisp
-
 (add-to-list 'default-frame-alist '(font . "Menlo-15"))
 
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
-
-#+end_src
-
-* Evil Mode
-#+begin_src emacs-lisp
 
 ;; Make ESC quit prompts
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -509,22 +429,12 @@ named arguments:
   :init
   (evil-commentary-mode))
 
-#+end_src
-
-* WhichKey
-#+begin_src emacs-lisp
-
 (use-package which-key
   :defer 0
   :diminish which-key-mode
   :config
   (which-key-mode 1)
   (setq which-key-idle-delay 1))
-
-#+end_src
-
-* Vertico
-#+begin_src emacs-lisp
 
 (use-package vertico
   :init
@@ -560,11 +470,6 @@ named arguments:
   :config
   (setq history-length 25))
 
-#+end_src
-
-* Marginalia
-#+begin_src emacs-lisp
-
 (use-package marginalia
   :bind (:map minibuffer-local-map
               ("M-A" . marginalia-cycle))
@@ -583,22 +488,10 @@ named arguments:
   :init
   (nerd-icons-completion-mode))
 
-
-#+end_src
-
-* Orderless
-#+begin_src emacs-lisp
-
 (use-package orderless
   :custom
   (completion-styles '(orderless basic))
   (completion-category-overrides '((file (styles basic partial-completion)))))
-
-#+end_src
-
-* Completion Framework
-** Corfu
-#+begin_src emacs-lisp
 
 ;; Auto completion example
 (use-package corfu
@@ -652,11 +545,6 @@ named arguments:
 (setq completion-cycle-threshold 3)
 (setq read-extended-command-predicate #'command-completion-default-include-p)
 
-#+end_src
-
-** Icons
-#+begin_src emacs-lisp
-
 (use-package kind-icon
   :after corfu
   :custom
@@ -682,11 +570,6 @@ named arguments:
   ;; function unless you use something similar
   (add-hook 'kb/themes-hooks #'(lambda () (interactive) (kind-icon-reset-cache))))
 
-#+end_src
-
-** Documentation
-#+begin_src emacs-lisp
-
 (use-package corfu-doc
   ;; NOTE 2022-02-05: At the time of writing, `corfu-doc' is not yet on melpa
   :straight (corfu-doc :type git :host github :repo "galeo/corfu-doc")
@@ -709,20 +592,9 @@ named arguments:
   (corfu-echo-documentation nil)
   )
 
-#+end_src
-
-* Consult
-#+begin_src emacs-lisp
-
 (use-package consult
   :config
   (global-set-key (kbd "C-s") 'consult-line))
-
-#+end_src
-
-* Org Mode Configuration
-** UI Customization
-#+begin_src emacs-lisp
 
 (setq org-edit-src-content-indentation 0)
 
@@ -742,12 +614,6 @@ named arguments:
   (add-hook 'org-mode-hook 'toc-org-enable)
   (add-hook 'org-mode-hook 'toc-org-insert-toc))
 
-#+end_src
-
-** Babel Configuration
-
-#+begin_src emacs-lisp
-
 (org-babel-do-load-languages
  'org-babel-load-languages
  '((emacs-lisp . t)
@@ -755,23 +621,12 @@ named arguments:
 
 (setq org-confirm-babel-evaluate nil)
 
-#+end_src
-
-** Structure Templates
-
-#+begin_src emacs-lisp
-
 (require 'org-tempo)
 
 (add-to-list 'org-structure-template-alist '("el" . "src emacs-lisp"))
 (add-to-list 'org-structure-template-alist '("py" . "src python"))
 (add-to-list 'org-structure-template-alist '("lc" . "src c"))
 (add-to-list 'org-structure-template-alist '("cp" . "src c++"))
-
-#+end_src
-
-* Latex Setup
-#+begin_src emacs-lisp
 
 (use-package auctex
   :defer t
@@ -808,22 +663,12 @@ named arguments:
   ;; (setq-default pdf-view-display-size 'fit-page)
   )
 
-#+end_src
-
-* YASnippets
-#+begin_src emacs-lisp
-
 (use-package yasnippet
   :hook ((prog-mode text-mode LaTeX-mode latex-mode) . yas-minor-mode)
   :config
   (setq yas-snippet-dirs '("~/.config/doom/snippets/"))
   (yas-reload-all)
   (yas-global-mode 1))
-
-#+end_src
-
-* Modeline
-#+begin_src emacs-lisp
 
 (use-package doom-modeline
   :ensure t
@@ -856,10 +701,6 @@ named arguments:
 	)
   )
 
-#+end_src
-
-* LSP
-#+begin_src emacs-lisp
 (setenv "LSP_USE_PLISTS" "true")
 
 (defun lsp-booster--advice-json-parse (old-fn &rest args)
@@ -914,12 +755,6 @@ named arguments:
 ;;   :ensure nil
 ;;   :hook (prog-mode . eglot-ensure))
 
-
-#+end_src
-
-* Format All
-#+begin_src emacs-lisp
-
 (use-package format-all
   :commands format-all-mode
   :hook (prog-mode . format-all-mode)
@@ -927,22 +762,12 @@ named arguments:
   (setq-default format-all-formatters
                 '(("C++"   (clang-format)))))
 
-#+end_src
-
-* Packages to enhance Prog Mode UI
-#+begin_src emacs-lisp
-
 (use-package indent-guide
   :hook (prog-mode . indent-guide-mode))
 
 
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
-
-#+end_src
-
-* Flycheck
-#+begin_src emacs-lisp
 
 (add-hook 'text-mode-hook 'flyspell-mode)
 (add-hook 'prog-mode-hook 'flyspell-prog-mode)
@@ -952,5 +777,3 @@ named arguments:
 
 (use-package flyspell-correct-popup
   :after flyspell-correct)
-
-#+end_src
