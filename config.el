@@ -1,9 +1,9 @@
-(defvar elpaca-installer-version 0.7)
+(defvar elpaca-installer-version 0.11)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
 (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
-                              :ref nil :depth 1
+                              :ref nil :depth 1 :inherit ignore
                               :files (:defaults "elpaca-test.el" (:exclude "extensions"))
                               :build (:not elpaca--activate-package)))
 (let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
@@ -13,38 +13,42 @@
   (add-to-list 'load-path (if (file-exists-p build) build repo))
   (unless (file-exists-p repo)
     (make-directory repo t)
-    (when (< emacs-major-version 28) (require 'subr-x))
+    (when (<= emacs-major-version 28) (require 'subr-x))
     (condition-case-unless-debug err
-        (if-let ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
-                 ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
-                                                 ,@(when-let ((depth (plist-get order :depth)))
-                                                     (list (format "--depth=%d" depth) "--no-single-branch"))
-                                                 ,(plist-get order :repo) ,repo))))
-                 ((zerop (call-process "git" nil buffer t "checkout"
-                                       (or (plist-get order :ref) "--"))))
-                 (emacs (concat invocation-directory invocation-name))
-                 ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
-                                       "--eval" "(byte-recompile-directory \".\" 0 'force)")))
-                 ((require 'elpaca))
-                 ((elpaca-generate-autoloads "elpaca" repo)))
+        (if-let* ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
+                  ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
+                                                  ,@(when-let* ((depth (plist-get order :depth)))
+                                                      (list (format "--depth=%d" depth) "--no-single-branch"))
+                                                  ,(plist-get order :repo) ,repo))))
+                  ((zerop (call-process "git" nil buffer t "checkout"
+                                        (or (plist-get order :ref) "--"))))
+                  (emacs (concat invocation-directory invocation-name))
+                  ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
+                                        "--eval" "(byte-recompile-directory \".\" 0 'force)")))
+                  ((require 'elpaca))
+                  ((elpaca-generate-autoloads "elpaca" repo)))
             (progn (message "%s" (buffer-string)) (kill-buffer buffer))
           (error "%s" (with-current-buffer buffer (buffer-string))))
       ((error) (warn "%s" err) (delete-directory repo 'recursive))))
   (unless (require 'elpaca-autoloads nil t)
     (require 'elpaca)
     (elpaca-generate-autoloads "elpaca" repo)
-    (load "./elpaca-autoloads")))
+    (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
 (add-hook 'after-init-hook #'elpaca-process-queues)
 (elpaca `(,@elpaca-order))
 
-;; Uncomment for systems which cannot create symlinks:
+;; ── Enable symlink mode for systems that cannot create symlinks ──
 (elpaca-no-symlink-mode)
 
-;; Install use-package support
+;; ── Install use-package support ──
 (elpaca elpaca-use-package
   ;; Enable use-package :ensure support for Elpaca.
   (elpaca-use-package-mode)
   (setq elpaca-use-package-by-default t))
+
+(elpaca-wait)
+
+(require 'cl-lib)
 
 (cl-defun slot/vc-install (&key (fetcher "github") repo name rev backend)
   "Install a package from a remote if it's not already installed.
@@ -66,39 +70,49 @@ named arguments:
     (unless (package-installed-p pac-name)
       (package-vc-install url iname rev backend))))
 
-(setq inhibit-startup-message t)
+;; ── Disable startup distractions ──
+(setq inhibit-startup-message t
+      use-dialog-box nil
+      ring-bell-function 'ignore)
 
-(setq use-dialog-box nil)
-
+;; ── Clean interface ──
 (scroll-bar-mode -1)
 (tool-bar-mode -1)
 (tooltip-mode -1)
+(menu-bar-mode -1)
 (set-fringe-mode 10)
 
-(menu-bar-mode -1)
-
-(setq ring-bell-function 'ignore)
-
+;; ── Programming enhancements ──
 (add-hook 'prog-mode-hook 'display-line-numbers-mode)
 ;; (setq display-line-numbers-type 'relative)
 
+;; ── File management ──
 (recentf-mode 1)
-
+(save-place-mode 1)
 (setq default-directory "~/")
 
-(setq warning-minimum-level :emergency)
-
+;; ── Auto-revert buffers ──
 (global-auto-revert-mode 1)
-
-;; Revert Dired and other buffers
 (setq global-auto-revert-non-file-buffers t)
 
-(save-place-mode 1)
+;; ── Warning levels ──
+(setq warning-minimum-level :emergency)
 
+;; ── Suppress specific warnings ──
+(setq byte-compile-warnings '(cl-functions))
+
+;; ── Environment path integration ──
 (use-package exec-path-from-shell
   :ensure t
   :config
   (exec-path-from-shell-initialize))
+
+;; macOS-Specific Configurations
+(when (eq system-type 'darwin)
+  (setq mac-option-key-is-meta nil
+        mac-command-key-is-meta t
+        mac-command-modifier 'meta
+        mac-option-modifier 'none))
 
 (delete-selection-mode 1)    ;; You can select text and delete it by typing.
 (electric-indent-mode 1)    ;; Turn On/Off the indention that Emacs does by default.
@@ -117,8 +131,8 @@ named arguments:
     (message "")))
 
 (use-package ef-themes
-  ;; :config
-  ;; (load-theme 'ef-bio t)
+  :config
+  (load-theme 'ef-night t)
   )
 
 (use-package catppuccin-theme
@@ -126,31 +140,24 @@ named arguments:
   ;; (load-theme 'catppuccin t)
   )
 
-
 (use-package doom-themes
   :ensure t
   :config
   ;; Enable a Doom theme of your choice
-  (load-theme 'doom-one t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
+  ;; (load-theme 'doom-one t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
 
-  ;; Enable flashing mode-line on errors
-  ;; (doom-themes-visual-bell-config)
-
-  ;; Enable custom neotree / treemacs theme
-  (doom-themes-treemacs-config)
-
-  ;; Corrects org-mode faces
-  (doom-themes-org-config))
+  ;; ── Enable Doom theme integrations ──
+  ;; (doom-themes-visual-bell-config)    ; Flash modeline on errors
+  (doom-themes-treemacs-config)          ; Treemacs theme support
+  (doom-themes-org-config))              ; Enhanced org-mode faces
 
 (use-package all-the-icons
   :ensure t
   :if (display-graphic-p))
 
 (setq doom-themes-enable-bold t
-      doom-themes-enable-italic t)
-
-;; Optional: if using org-mode, improve fontification
-(setq doom-themes-org-fontify-whole-heading-line t
+      doom-themes-enable-italic t
+      doom-themes-org-fontify-whole-heading-line t
       doom-themes-org-agenda-height 1.1)
 
 (use-package general
@@ -194,25 +201,43 @@ named arguments:
     "b w" '(bookmark-save :wk "Save current bookmarks to bookmark file"))
   
   (wk/leader-keys
-    "c" '(flyspell-correct-wrapper :wk "Flyspell correct wrapper"))
+    "c" '(:ignore t :wk "C/C++/Flyspell")
+    "c c" '(flyspell-correct-wrapper :wk "Flyspell correct")
+    "c f" '(clang-format-buffer :wk "Format buffer")
+    "c r" '(clang-format-region :wk "Format region")
+    "c m c" '(my/cmake-project-configure :wk "CMake configure")
+    "c m b" '(my/cmake-project-build :wk "CMake build")
+    "c d" '(disaster :wk "Show assembly"))
 
   
   (wk/leader-keys
-    "d" '(:ignore t :wk "Describe")
+    "d" '(:ignore t :wk "Debug/Describe")
+    ;; Debug (DAP) keybindings
+    "d d" '(dap-debug :wk "Start debugging")
+    "d b" '(dap-breakpoint-toggle :wk "Toggle breakpoint")
+    "d c" '(dap-continue :wk "Continue")
+    "d n" '(dap-next :wk "Next")
+    "d s" '(dap-step-in :wk "Step in")
+    "d o" '(dap-step-out :wk "Step out")
+    "d r" '(dap-restart-frame :wk "Restart frame")
+    "d q" '(dap-disconnect :wk "Disconnect")
+    "d e" '(dap-eval :wk "Eval")
+    "d u" '(dap-ui-repl :wk "REPL")
+    ;; Describe commands
     "d a" '(counsel-apropos :wk "Apropos")
-    "d b" '(describe-bindings :wk "Describe bindings")
-    "d c" '(describe-char :wk "Describe character under cursor")
-    "d d" '(:ignore t :wk "Emacs documentation")
-    "d d a" '(about-emacs :wk "About Emacs")
-    "d d d" '(view-emacs-debugging :wk "View Emacs debugging")
-    "d d f" '(view-emacs-FAQ :wk "View Emacs FAQ")
-    "d d m" '(info-emacs-manual :wk "The Emacs manual")
-    "d d n" '(view-emacs-news :wk "View Emacs news")
-    "d d o" '(describe-distribution :wk "How to obtain Emacs")
-    "d d p" '(view-emacs-problems :wk "View Emacs problems")
-    "d d t" '(view-emacs-todo :wk "View Emacs todo")
-    "d d w" '(describe-no-warranty :wk "Describe no warranty")
-    "d e" '(view-echo-area-messages :wk "View echo area messages")
+    "d B" '(describe-bindings :wk "Describe bindings")
+    "d C" '(describe-char :wk "Describe character under cursor")
+    "d D" '(:ignore t :wk "Emacs documentation")
+    "d D a" '(about-emacs :wk "About Emacs")
+    "d D d" '(view-emacs-debugging :wk "View Emacs debugging")
+    "d D f" '(view-emacs-FAQ :wk "View Emacs FAQ")
+    "d D m" '(info-emacs-manual :wk "The Emacs manual")
+    "d D n" '(view-emacs-news :wk "View Emacs news")
+    "d D o" '(describe-distribution :wk "How to obtain Emacs")
+    "d D p" '(view-emacs-problems :wk "View Emacs problems")
+    "d D t" '(view-emacs-todo :wk "View Emacs todo")
+    "d D w" '(describe-no-warranty :wk "Describe no warranty")
+    "d E" '(view-echo-area-messages :wk "View echo area messages")
     "d f" '(describe-function :wk "Describe function")
     "d F" '(describe-face :wk "Describe face")
     "d g" '(describe-gnu-project :wk "Describe GNU Project")
@@ -223,9 +248,9 @@ named arguments:
     "d L" '(describe-language-environment :wk "Describe language environment")
     "d m" '(describe-mode :wk "Describe mode")
     "d p" '(describe-package :wk "Describe a package")
-    "d r" '(:ignore t :wk "Reload")
-    "d r r" '((lambda () (interactive)
-                (load-file "~/.emacs.d/init.el"))
+    "d R" '(:ignore t :wk "Reload")
+    "d R r" '((lambda () (interactive)
+                (load-file "~/.config/emacs/init.el"))
               :wk "Reload emacs config")
     "d t" '(consult-theme :wk "Load theme")
     "d v" '(describe-variable :wk "Describe variable")
@@ -288,9 +313,26 @@ named arguments:
     "i" '(package-install :wk "Package Installer"))
 
   (wk/leader-keys
-    "l" '(:ignore t :wk "LaTeX")
-    "l r" '(my-latex-compile :wk "Complie LaTeX File")
-    "l v" '(my-latex-view :wk "View current latex file's PDF"))
+    "l" '(:ignore t :wk "LSP/LaTeX")
+    ;; LSP keybindings
+    "l a" '(lsp-execute-code-action :wk "Code action")
+    "l r" '(lsp-rename :wk "Rename")
+    "l f" '(lsp-format-buffer :wk "Format buffer")
+    "l d" '(lsp-find-definition :wk "Find definition")
+    "l D" '(lsp-find-declaration :wk "Find declaration")
+    "l i" '(lsp-find-implementation :wk "Find implementation")
+    "l t" '(lsp-find-type-definition :wk "Find type definition")
+    "l R" '(lsp-find-references :wk "Find references")
+    "l s" '(lsp-describe-thing-at-point :wk "Describe at point")
+    "l h" '(lsp-signature-activate :wk "Signature help")
+    "l L" '(lsp-avy-lens :wk "Avy lens")
+    "l w r" '(lsp-workspace-restart :wk "Restart workspace")
+    "l w s" '(lsp-workspace-shutdown :wk "Shutdown workspace")
+    "l e" '(lsp-treemacs-errors-list :wk "Error list")
+    "l o" '(lsp-organize-imports :wk "Organize imports")
+    ;; LaTeX keybindings
+    "l x c" '(my-latex-compile :wk "Compile LaTeX File")
+    "l x v" '(my-latex-view :wk "View current latex file's PDF"))
 
   (wk/leader-keys
     "m" '(:ignore t :wk "Org")
@@ -312,15 +354,38 @@ named arguments:
   (wk/leader-keys
     "o" '(:ignore t :wk "Open")
     "o d" '(dashboard-open :wk "Dashboard")
-    "o e" '(cmd :which-key "Toggle Shell")
+    "o e" '(vterm-toggle :which-key "Toggle Shell")
     "o f" '(make-frame :wk "Open buffer in new frame")
     "o F" '(select-frame-by-name :wk "Select frame by name")
-    "o p" '(treemacs :wk "Treemacs"))
+    "o p" '(treemacs :wk "Treemacs")
+    "o t" '(vterm-toggle :which-key "Toggle Shell"))
 
-  ;; projectile-command-map already has a ton of bindings
-  ;; set for us, so no need to specify each individually.
   (wk/leader-keys
-    "p" '(projectile-command-map :wk "Projectile"))
+    "p" '(:ignore t :wk "Python/Projectile")
+    ;; Python-specific keybindings
+    "p p v" '(pyvenv-activate :wk "Activate venv")
+    "p p V" '(pyvenv-deactivate :wk "Deactivate venv")
+    "p p t" '(python-pytest :wk "Run pytest")
+    "p p f" '(python-black-buffer :wk "Format with Black")
+    "p p i" '(py-isort-buffer :wk "Sort imports")
+    "p p r" '(run-python :wk "Run Python REPL")
+    ;; Projectile commands (kept for backward compatibility)
+    "p !" '(projectile-run-shell-command-in-root :wk "Run shell command")
+    "p &" '(projectile-run-async-shell-command-in-root :wk "Run async shell command")
+    "p a" '(projectile-toggle-between-implementation-and-test :wk "Toggle impl/test")
+    "p b" '(projectile-switch-to-buffer :wk "Switch to buffer")
+    "p c" '(projectile-compile-project :wk "Compile project")
+    "p d" '(projectile-find-dir :wk "Find directory")
+    "p D" '(projectile-dired :wk "Dired")
+    "p e" '(projectile-recentf :wk "Recent files")
+    "p f" '(projectile-find-file :wk "Find file")
+    "p g" '(projectile-find-tag :wk "Find tag")
+    "p k" '(projectile-kill-buffers :wk "Kill buffers")
+    "p p" '(projectile-switch-project :wk "Switch project")
+    "p r" '(projectile-replace :wk "Replace")
+    "p R" '(projectile-regenerate-tags :wk "Regenerate tags")
+    "p s" '(projectile-save-project-buffers :wk "Save project buffers")
+    "p t" '(projectile-test-project :wk "Test project"))
 
   (wk/leader-keys
     "s" '(:ignore t :wk "Search")
@@ -331,14 +396,12 @@ named arguments:
 
   (wk/leader-keys
     "t" '(:ignore t :wk "Toggle")
-    "t e" '(eshell-toggle :wk "Toggle eshell")
     "t f" '(flycheck-mode :wk "Toggle flycheck")
     "t l" '(display-line-numbers-mode :wk "Toggle line numbers")
     "t n" '(neotree-toggle :wk "Toggle neotree file viewer")
     "t o" '(org-mode :wk "Toggle org mode")
     "t r" '(rainbow-mode :wk "Toggle rainbow mode")
-    "t t" '(visual-line-mode :wk "Toggle truncated lines")
-    "t v" '(vterm-toggle :wk "Toggle vterm"))
+    "t t" '(visual-line-mode :wk "Toggle truncated lines"))
 
   (wk/leader-keys
     "w" '(:ignore t :wk "Windows")
@@ -493,26 +556,18 @@ named arguments:
   (completion-styles '(orderless basic))
   (completion-category-overrides '((file (styles basic partial-completion)))))
 
-;; Auto completion example
 (use-package corfu
   :custom
-  (corfu-auto t)          ;; Enable auto completion
-  ;; (corfu-separator ?_) ;; Set to orderless separator, if not using space
-  :bind
-  ;; Another key binding can be used, such as S-SPC.
-  ;; (:map corfu-map ("M-SPC" . corfu-insert-separator))
+  (corfu-auto nil)
+  (corfu-cycle t)
+  (corfu-preselect-first nil)
   :init
-  (global-corfu-mode))
-
-;; Manual completion example
-(use-package corfu
-  :custom
-  ;; (corfu-separator ?_) ;; Set to orderless separator, if not using space
+  (global-corfu-mode)
   :bind
-  ;; Configure SPC for separator insertion
-  (:map corfu-map ("SPC" . corfu-insert-separator))
-  :init
-  (global-corfu-mode))
+  (:map corfu-map
+        ("TAB" . corfu-next)
+        ("<tab>" . corfu-next)
+        ("S-TAB" . corfu-previous)))
 
 ;; (use-package corfu
 ;;   :init
@@ -549,30 +604,17 @@ named arguments:
   :after corfu
   :custom
   (kind-icon-use-icons t)
-  (kind-icon-default-face 'corfu-default) ; Have background color be the same as `corfu' face background
-  (kind-icon-blend-background nil)  ; Use midpoint color between foreground and background colors ("blended")?
+  (kind-icon-default-face 'corfu-default)
+  (kind-icon-blend-background nil)
   (kind-icon-blend-frac 0.08)
-
-  ;; NOTE 2022-02-05: `kind-icon' depends `svg-lib' which creates a cache
-  ;; directory that defaults to the `user-emacs-directory'. Here, I change that
-  ;; directory to a location appropriate to `no-littering' conventions, a
-  ;; package which moves directories of other packages to sane locations.
-  (svg-lib-icons-dir (no-littering-expand-var-file-name "svg-lib/cache/")) ; Change cache dir
   :config
-  (add-to-list 'corfu-margin-formatters #'kind-icon-margin-formatter) ; Enable `kind-icon'
-
-  ;; Add hook to reset cache so the icon colors match my theme
-  ;; NOTE 2022-02-05: This is a hook which resets the cache whenever I switch
-  ;; the theme using my custom defined command for switching themes. If I don't
-  ;; do this, then the backgound color will remain the same, meaning it will not
-  ;; match the background color corresponding to the current theme. Important
-  ;; since I have a light theme and dark theme I switch between. This has no
-  ;; function unless you use something similar
-  (add-hook 'kb/themes-hooks #'(lambda () (interactive) (kind-icon-reset-cache))))
+  ;; DO NOT use add-to-list here
+  (setq corfu-margin-formatters
+        '(kind-icon-margin-formatter corfu-margin-formatter)))
 
 (use-package corfu-doc
   ;; NOTE 2022-02-05: At the time of writing, `corfu-doc' is not yet on melpa
-  :straight (corfu-doc :type git :host github :repo "galeo/corfu-doc")
+  :ensure (:host github :repo "galeo/corfu-doc")
   :after corfu
   :hook (corfu-mode . corfu-doc-mode)
   :general (:keymaps 'corfu-map
@@ -701,71 +743,554 @@ named arguments:
 	)
   )
 
-(setenv "LSP_USE_PLISTS" "true")
-
-(defun lsp-booster--advice-json-parse (old-fn &rest args)
-  "Try to parse bytecode instead of json."
-  (or
-   (when (equal (following-char) ?#)
-     (let ((bytecode (read (current-buffer))))
-       (when (byte-code-function-p bytecode)
-         (funcall bytecode))))
-   (apply old-fn args)))
-(advice-add (if (progn (require 'json)
-                       (fboundp 'json-parse-buffer))
-                'json-parse-buffer
-              'json-read)
-            :around
-            #'lsp-booster--advice-json-parse)
-
-(defun lsp-booster--advice-final-command (old-fn cmd &optional test?)
-  "Prepend emacs-lsp-booster command to lsp CMD."
-  (let ((orig-result (funcall old-fn cmd test?)))
-    (if (and (not test?)                             ;; for check lsp-server-present?
-             (not (file-remote-p default-directory)) ;; see lsp-resolve-final-command, it would add extra shell wrapper
-             lsp-use-plists
-             (not (functionp 'json-rpc-connection))  ;; native json-rpc
-             (executable-find "emacs-lsp-booster"))
-        (progn
-          (when-let ((command-from-exec-path (executable-find (car orig-result))))  ;; resolve command from exec-path (in case not found in $PATH)
-            (setcar orig-result command-from-exec-path))
-          (message "Using emacs-lsp-booster for %s!" orig-result)
-          (cons "emacs-lsp-booster" orig-result))
-      orig-result)))
-(advice-add 'lsp-resolve-final-command :around #'lsp-booster--advice-final-command)
+; (setq lsp-use-plists t)
+;; (setenv "LSP_USE_PLISTS" "true")
+;;
+;; (defun lsp-booster--advice-json-parse (old-fn &rest args)
+;;   "Try to parse bytecode instead of json."
+;;   (or
+;;    (when (equal (following-char) ?#)
+;;      (let ((bytecode (read (current-buffer))))
+;;        (when (byte-code-function-p bytecode)
+;;          (funcall bytecode))))
+;;    (apply old-fn args)))
+;;
+;; (advice-add (if (progn (require 'json)
+;;                        (fboundp 'json-parse-buffer))
+;;                 'json-parse-buffer
+;;               'json-read)
+;;             :around
+;;             #'lsp-booster--advice-json-parse)
+;;
+;; (defun lsp-booster--advice-final-command (old-fn cmd &optional test?)
+;;   "Prepend emacs-lsp-booster command to lsp CMD."
+;;   (let ((orig-result (funcall old-fn cmd test?)))
+;;     (if (and (not test?)
+;;              (not (file-remote-p default-directory))
+;;              lsp-use-plists
+;;              (not (functionp 'json-rpc-connection))
+;;              (executable-find "emacs-lsp-booster"))
+;;         (progn
+;;           (when-let ((command-from-exec-path (executable-find (car orig-result))))
+;;             (setcar orig-result command-from-exec-path))
+;;           (message "Using emacs-lsp-booster for %s!" orig-result)
+;;           (cons "emacs-lsp-booster" orig-result))
+;;       orig-result)))
+;;
+;; (advice-add 'lsp-resolve-final-command :around #'lsp-booster--advice-final-command)
 
 (use-package lsp-mode
-  :hook (c++-mode . lsp-mode)
+  :commands (lsp lsp-deferred)
+  :init
+  (setq lsp-keymap-prefix "C-c l")  ;; Or 'C-l', 's-l'
+  :hook ((python-mode . lsp-deferred)
+         (c++-mode . lsp-deferred)
+         (c-mode . lsp-deferred)
+         (lsp-mode . lsp-enable-which-key-integration))
   :config
-  (setq lsp-completion-enable nil))
+  ;; General LSP settings
+  (setq lsp-completion-provider :none)  ;; We use Corfu for completion
+  (setq lsp-headerline-breadcrumb-enable t)
+  (setq lsp-modeline-code-actions-enable t)
+  (setq lsp-modeline-diagnostics-enable t)
+  (setq lsp-signature-auto-activate t)
+  (setq lsp-signature-render-documentation t)
+  
+  ;; Performance tuning
+  (setq lsp-idle-delay 0.5
+        lsp-log-io nil                    ;; Disable IO logging for better performance
+        read-process-output-max (* 1024 1024)  ;; 1MB - improves LSP performance
+        lsp-enable-file-watchers t
+        lsp-file-watch-threshold 2000)
+  
+  ;; UI improvements
+  (setq lsp-lens-enable t)
+  (setq lsp-semantic-tokens-enable t)
+  (setq lsp-enable-indentation t)
+  (setq lsp-enable-on-type-formatting t)
+  
+  ;; clangd-specific settings
+  (setq lsp-clients-clangd-args
+        '("--header-insertion=never"
+          "--background-index"
+          "--clang-tidy"
+          "--completion-style=detailed"
+          "--header-insertion-decorators"
+          "--all-scopes-completion"
+          "--cross-file-rename"
+          "--function-arg-placeholders"
+          "--fallback-style=llvm"
+          "-j=4"
+          "--pch-storage=memory")))
 
 (use-package lsp-ui
   :after lsp-mode
   :commands lsp-ui-mode
+  :hook (lsp-mode . lsp-ui-mode)
   :config
-  (setq lsp-ui-sideline-show-symbol nil
-        lsp-ui-sideline-enable t
-        lsp-ui-sideline-show-hover nil))
+  ;; LSP UI Sideline
+  (setq lsp-ui-sideline-enable t)
+  (setq lsp-ui-sideline-show-hover nil)
+  (setq lsp-ui-sideline-show-diagnostics t)
+  (setq lsp-ui-sideline-show-code-actions t)
+  (setq lsp-ui-sideline-update-mode 'line)
+  
+  ;; LSP UI Doc
+  (setq lsp-ui-doc-enable t)
+  (setq lsp-ui-doc-position 'at-point)
+  (setq lsp-ui-doc-show-with-cursor t)
+  (setq lsp-ui-doc-show-with-mouse t)
+  (setq lsp-ui-doc-delay 0.5)
+  
+  ;; LSP UI Peek
+  (setq lsp-ui-peek-enable t)
+  (setq lsp-ui-peek-show-directory t)
+  
+  ;; LSP UI Imenu
+  (setq lsp-ui-imenu-enable t)
+  (setq lsp-ui-imenu-kind-position 'top))
 
-(use-package treemacs-all-the-icons)
+(use-package lsp-treemacs
+  :after (lsp-mode treemacs)
+  :commands lsp-treemacs-errors-list
+  :config
+  (lsp-treemacs-sync-mode 1))
 
-(use-package lsp-treemacs)
+;; Treemacs icons integration
+(use-package treemacs-all-the-icons
+  :after treemacs)
 
-;; (use-package eglot
-;;   :ensure nil
-;;   :hook (prog-mode . eglot-ensure))
+;; Consult integration with LSP
+(use-package consult-lsp
+  :ensure t
+  :after (lsp-mode consult)
+  :config
+  (define-key lsp-mode-map [remap xref-find-apropos] #'consult-lsp-symbols))
+
+;; LSP origami for code folding
+(use-package lsp-origami
+  :ensure t
+  :after lsp-mode
+  :hook (lsp-mode . lsp-origami-try-enable))
+
+;; Flycheck integration with LSP
+(use-package flycheck
+  :ensure t
+  :hook (prog-mode . flycheck-mode)
+  :config
+  (setq flycheck-check-syntax-automatically '(save mode-enabled))
+  (setq flycheck-display-errors-delay 0.3))
+
+;; Auto-completion integration
+(defun my/lsp-mode-setup-completion ()
+  "Configure completion in LSP mode."
+  (setf (alist-get 'styles (alist-get 'lsp-capf completion-category-defaults))
+        '(flex)))
+
+(add-hook 'lsp-completion-mode-hook #'my/lsp-mode-setup-completion)
+
+;; Python-specific LSP configuration
+(use-package lsp-pyright
+  :ensure t
+  :hook (python-mode . (lambda ()
+                         (require 'lsp-pyright)
+                         (lsp-deferred)))
+  :config
+  ;; Pyright settings
+  (setq lsp-pyright-auto-import-completions t)
+  (setq lsp-pyright-auto-search-paths t)
+  (setq lsp-pyright-use-library-code-for-types t)
+  (setq lsp-pyright-diagnostic-mode "workspace")
+  (setq lsp-pyright-typechecking-mode "basic")  ;; Can be "off", "basic", or "strict"
+  (setq lsp-pyright-venv-path nil))  ;; Auto-detect virtualenv
+
+;; Python mode configuration
+(use-package python
+  :ensure nil
+  :mode ("\\.py\\'" . python-mode)
+  :config
+  ;; Python interpreter settings
+  (setq python-shell-interpreter "python3")
+  
+  ;; Indentation
+  (setq python-indent-offset 4)
+  (setq python-indent-guess-indent-offset-verbose nil)
+  
+  ;; Environment detection
+  (defun my/python-mode-hook ()
+    "Custom Python mode configuration."
+    (setq-local fill-column 88)  ;; Black's default line length
+    (setq-local tab-width 4))
+  
+  (add-hook 'python-mode-hook #'my/python-mode-hook))
+
+;; Python environment management
+(use-package pyvenv
+  :ensure t
+  :hook (python-mode . pyvenv-mode)
+  :config
+  (setq pyvenv-mode-line-indicator '(pyvenv-virtual-env-name ("[venv:" pyvenv-virtual-env-name "] ")))
+  
+  ;; Auto-activate virtualenv
+  (defun my/auto-activate-pyvenv ()
+    "Automatically activate Python virtual environment."
+    (when-let* ((venv-dir (locate-dominating-file default-directory "venv"))
+                (venv-path (expand-file-name "venv" venv-dir)))
+      (pyvenv-activate venv-path)))
+  
+  (add-hook 'python-mode-hook #'my/auto-activate-pyvenv))
+
+;; Python testing support
+(use-package python-pytest
+  :ensure t
+  :after python
+  :config
+  (setq python-pytest-executable "pytest"))
+
+;; Python formatting with Black
+(use-package python-black
+  :ensure t
+  :after python
+  :hook (python-mode . python-black-on-save-mode-enable-dwim)
+  :config
+  (setq python-black-command "black")
+  (setq python-black-extra-args '("--line-length" "88")))
+
+;; Python docstring support
+(use-package python-docstring
+  :ensure t
+  :hook (python-mode . python-docstring-mode))
+
+;; Import sorting with isort
+(use-package py-isort
+  :ensure t
+  :after python
+  :hook (python-mode . (lambda ()
+                         (add-hook 'before-save-hook #'py-isort-before-save nil t))))
+
+;; Python debugging support
+(use-package dap-mode
+  :ensure t
+  :after lsp-mode
+  :config
+  (require 'dap-python)
+  (setq dap-python-debugger 'debugpy)
+  
+  ;; Python debug templates
+  (dap-register-debug-template "Python :: Run file"
+                               (list :type "python"
+                                     :args ""
+                                     :cwd nil
+                                     :request "launch"
+                                     :name "Python :: Run file"
+                                     :program nil)))
+
+;; C/C++ mode configuration
+(use-package cc-mode
+  :ensure nil
+  :mode (("\\.c\\'" . c-mode)
+         ("\\.cpp\\'" . c++-mode)
+         ("\\.cc\\'" . c++-mode)
+         ("\\.cxx\\'" . c++-mode)
+         ("\\.h\\'" . c++-mode)
+         ("\\.hpp\\'" . c++-mode)
+         ("\\.hxx\\'" . c++-mode))
+  :config
+  ;; Indentation style
+  (setq c-default-style "linux"
+        c-basic-offset 4)
+  
+  ;; Custom C/C++ mode hook
+  (defun my/c-c++-mode-hook ()
+    "Custom C/C++ mode configuration."
+    (setq-local fill-column 120)
+    (setq-local tab-width 4)
+    (setq-local indent-tabs-mode nil)
+    ;; Enable electric behavior
+    (c-toggle-electric-state 1)
+    (c-toggle-auto-newline 1))
+  
+  (add-hook 'c-mode-hook #'my/c-c++-mode-hook)
+  (add-hook 'c++-mode-hook #'my/c-c++-mode-hook))
+
+;; CMake integration
+(use-package cmake-mode
+  :ensure t
+  :mode (("CMakeLists\\.txt\\'" . cmake-mode)
+         ("\\.cmake\\'" . cmake-mode)))
+
+(use-package cmake-font-lock
+  :ensure t
+  :after cmake-mode
+  :hook (cmake-mode . cmake-font-lock-activate))
+
+;; C/C++ formatting with clang-format
+(use-package clang-format
+  :ensure t
+  :after cc-mode
+  :config
+  (setq clang-format-style "file")  ;; Use .clang-format file
+  
+  ;; Auto-format on save
+  (defun my/clang-format-on-save ()
+    "Format C/C++ files with clang-format on save."
+    (when (or (eq major-mode 'c-mode)
+              (eq major-mode 'c++-mode))
+      (clang-format-buffer)))
+  
+  ;; Uncomment to enable auto-formatting on save
+  ;; (add-hook 'before-save-hook #'my/clang-format-on-save)
+  )
+
+;; Modern C++ font-lock
+(use-package modern-cpp-font-lock
+  :ensure t
+  :hook (c++-mode . modern-c++-font-lock-mode))
+
+;; CMake build integration
+(use-package cmake-project
+  :ensure t
+  :after cc-mode
+  :config
+  (defun my/cmake-project-configure ()
+    "Configure CMake project."
+    (interactive)
+    (cmake-project-configure-project))
+  
+  (defun my/cmake-project-build ()
+    "Build CMake project."
+    (interactive)
+    (cmake-project-build-project)))
+
+;; C/C++ debugging with dap-mode
+(use-package dap-mode
+  :after lsp-mode
+  :config
+  (require 'dap-lldb)
+  (require 'dap-gdb-lldb)
+  
+  ;; GDB/LLDB configurations
+  (setq dap-lldb-debug-program "lldb-vscode")
+  (setq dap-gdb-lldb-path "lldb-vscode")
+  
+  ;; Debug templates for C++
+  (dap-register-debug-template
+   "C++ :: Run Configuration"
+   (list :type "lldb"
+         :request "launch"
+         :name "C++ :: Run Configuration"
+         :target nil
+         :cwd nil))
+  
+  (dap-register-debug-template
+   "C++ :: Attach to Process"
+   (list :type "lldb"
+         :request "attach"
+         :name "C++ :: Attach to Process"
+         :pid nil)))
+
+;; Company backend for C/C++ headers
+(use-package company-c-headers
+  :ensure t
+  :after company
+  :config
+  (add-to-list 'company-backends 'company-c-headers)
+  (setq company-c-headers-path-system
+        '("/usr/include/"
+          "/usr/local/include/"
+          "/usr/include/c++/11/")))  ;; Adjust version as needed
+
+;; Disaster: show assembly for C/C++
+(use-package disaster
+  :ensure t
+  :after cc-mode
+  :commands disaster)
+
+;; ── LSP Java (Eclipse JDT Language Server) ──
+(use-package lsp-java
+  :ensure t
+  :after lsp-mode
+  :config
+  ;; ── Java runtime and server settings ──
+  (setq lsp-java-server-install-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/server/"))
+  (setq lsp-java-workspace-dir (expand-file-name "~/.emacs.d/eclipse.jdt.ls/workspace/"))
+  
+  ;; ── Java version settings ──
+  ;; (setq lsp-java-java-path "/path/to/java")  ;; Uncomment and set if needed
+  
+  ;; ── Code formatting ──
+  (setq lsp-java-format-enabled t)
+  (setq lsp-java-format-settings-url nil)  ;; Use default formatter
+  (setq lsp-java-format-settings-profile nil)
+  
+  ;; ── Import organization ──
+  (setq lsp-java-save-actions-organize-imports t)
+  
+  ;; ── Code generation ──
+  (setq lsp-java-autobuild-enabled t)
+  (setq lsp-java-completion-enabled t)
+  (setq lsp-java-completion-guess-method-arguments t)
+  (setq lsp-java-completion-favorite-static-members
+        '("org.junit.Assert.*"
+          "org.junit.Assume.*"
+          "org.junit.jupiter.api.Assertions.*"
+          "org.junit.jupiter.api.Assumptions.*"
+          "org.junit.jupiter.api.DynamicContainer.*"
+          "org.junit.jupiter.api.DynamicTest.*"
+          "org.mockito.Mockito.*"
+          "org.mockito.ArgumentMatchers.*"
+          "org.mockito.Answers.*"))
+  
+  ;; ── Maven settings ──
+  (setq lsp-java-maven-download-sources t)
+  (setq lsp-java-maven-update-snapshots nil)
+  
+  ;; ── Gradle settings ──
+  (setq lsp-java-import-gradle-enabled t)
+  (setq lsp-java-import-gradle-wrapper-enabled t)
+  (setq lsp-java-import-gradle-version nil)  ;; Auto-detect
+  (setq lsp-java-import-gradle-home nil)     ;; Auto-detect
+  
+  ;; ── Code lens ──
+  (setq lsp-java-references-code-lens-enabled t)
+  (setq lsp-java-implementations-code-lens-enabled t)
+  
+  ;; ── Signature help ──
+  (setq lsp-java-signature-help-enabled t)
+  
+  ;; ── Content provider ──
+  (setq lsp-java-content-provider-preferred "fernflower"))  ;; Decompiler
+
+;; ── Java mode configuration ──
+(add-hook 'java-mode-hook
+          (lambda ()
+            (lsp-deferred)
+            (setq-local tab-width 4)
+            (setq-local c-basic-offset 4)
+            (setq-local indent-tabs-mode nil)))
+
+;; ── DAP mode for Java debugging ──
+(use-package dap-java
+  :ensure nil
+  :after (lsp-java dap-mode)
+  :config
+  ;; ── Java debug configurations ──
+  (dap-register-debug-template
+   "Java :: Run Configuration"
+   (list :type "java"
+         :request "launch"
+         :args ""
+         :cwd nil
+         :stopOnEntry :json-false
+         :host "localhost"
+         :request "launch"
+         :modulePaths []
+         :classPaths nil
+         :name "Java :: Run Configuration"
+         :projectName nil
+         :mainClass nil))
+  
+  (dap-register-debug-template
+   "Java :: Attach to Process"
+   (list :type "java"
+         :request "attach"
+         :hostName "localhost"
+         :port 5005
+         :name "Java :: Attach to Process")))
+
+;; ── Spring Boot support (optional) ──
+(use-package lsp-java-boot
+  :ensure nil
+  :after lsp-java
+  :config
+  (lsp-java-boot-lens-mode 1))
+
+;; ── Maven support ──
+(use-package mvn
+  :ensure t
+  :commands (mvn-clean mvn-compile mvn-test))
+
+;; ── Gradle support ──
+(use-package gradle-mode
+  :ensure t
+  :hook (java-mode . gradle-mode)
+  :config
+  (setq gradle-use-gradlew t))
+
+;; macOS-specific paths and settings for LSP
+(when (eq system-type 'darwin)
+  ;; Homebrew LLVM paths for Apple Silicon
+  (defvar homebrew-llvm-path
+    (if (file-directory-p "/opt/homebrew/opt/llvm")
+        "/opt/homebrew/opt/llvm"  ;; Apple Silicon
+      "/usr/local/opt/llvm"))      ;; Intel Mac
+  
+  ;; Set clangd executable
+  (with-eval-after-load 'lsp-mode
+    (setq lsp-clients-clangd-executable
+          (expand-file-name "bin/clangd" homebrew-llvm-path)))
+  
+  ;; Set clang-format executable
+  (with-eval-after-load 'clang-format
+    (setq clang-format-executable
+          (expand-file-name "bin/clang-format" homebrew-llvm-path)))
+  
+  ;; Python configuration for macOS
+  (setq python-shell-interpreter "python3")
+  
+  ;; macOS system includes for C/C++
+  (with-eval-after-load 'company-c-headers
+    (setq company-c-headers-path-system
+          (append
+           ;; Xcode Command Line Tools headers
+           '("/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include"
+             "/Library/Developer/CommandLineTools/usr/include/c++/v1")
+           ;; Homebrew includes
+           (list (expand-file-name "include" homebrew-llvm-path))
+           (if (file-directory-p "/opt/homebrew/include")
+               '("/opt/homebrew/include")
+             '("/usr/local/include")))))
+  
+  ;; Performance optimizations for macOS
+  (setq lsp-file-watch-threshold 5000)  ;; Higher threshold for macOS
+  (setq lsp-enable-file-watchers t)
+  
+  ;; Use system trash on macOS
+  (setq delete-by-moving-to-trash t)
+  
+  ;; macOS-specific DAP settings
+  (with-eval-after-load 'dap-mode
+    ;; Find the first available lldb
+    (setq dap-lldb-debug-program
+          (seq-find #'file-exists-p
+                    '("/usr/bin/lldb-vscode"
+                      "/opt/homebrew/opt/llvm/bin/lldb-vscode"
+                      "/usr/local/opt/llvm/bin/lldb-vscode")))))
 
 (use-package format-all
   :commands format-all-mode
   :hook (prog-mode . format-all-mode)
   :config
   (setq-default format-all-formatters
-                '(("C++"   (clang-format)))))
+                '(("C" (clang-format))
+                  ("C++" (clang-format))
+                  ("Python" (black)))))
 
+;;; ── Visual indentation guides ──
 (use-package indent-guide
-  :hook (prog-mode . indent-guide-mode))
+  :hook (prog-mode . indent-guide-mode)
+  :config
+  (setq indent-guide-char "│"))
 
+;; (use-package highlight-indent-guides
+;;   :ensure t
+;;   :hook (prog-mode . highlight-indent-guides-mode)
+;;   :config
+;;   (setq highlight-indent-guides-method 'character)
+;;   (setq highlight-indent-guides-character ?│)
+;;   (setq highlight-indent-guides-auto-enabled nil))
 
+;; ── Colorful delimiter pairs ──
 (use-package rainbow-delimiters
   :hook (prog-mode . rainbow-delimiters-mode))
 
@@ -777,3 +1302,27 @@ named arguments:
 
 (use-package flyspell-correct-popup
   :after flyspell-correct)
+
+(use-package vterm
+  :ensure t)
+
+(use-package vterm-toggle
+  :ensure t
+  :after vterm
+  :config
+  (setq vterm-toggle-fullscreen-p nil)
+  (add-to-list 'display-buffer-alist
+               '((lambda (buffer-or-name _)
+                   (let ((buffer (get-buffer buffer-or-name)))
+                     (with-current-buffer buffer
+                       (or (equal major-mode 'vterm-mode)
+                           (string-prefix-p vterm-buffer-name (buffer-name buffer))))))
+                 (display-buffer-reuse-window display-buffer-at-bottom)
+                 ;;(display-buffer-reuse-window display-buffer-in-direction)
+                 ;;display-buffer-in-direction/direction/dedicated is added in emacs27
+                 ;;(direction . bottom)
+                 ;;(dedicated . t) ;dedicated is supported in emacs27
+                 (reusable-frames . visible)
+                 (window-height . 0.3))))
+
+(add-to-list 'load-path "~/.config/emacs/manual-packages/")
