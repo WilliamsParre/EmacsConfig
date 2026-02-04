@@ -41,6 +41,7 @@
 - [[#vterm][Vterm]]
 - [[#load-manually-installed-packages][Load Manually Installed Packages]]
 - [[#beacon][Beacon]]
+- [[#hideshow-mode-settings][HideShow Mode Settings]]
 
 * Package Manager
 #+begin_src emacs-lisp
@@ -201,9 +202,14 @@ named arguments:
 * Themes
 #+begin_src emacs-lisp
 
+(custom-set-faces
+ '(font-lock-keyword-face ((t (:slant italic))))
+ '(font-lock-type-face ((t (:slant italic))))
+ '(font-lock-comment-face ((t (:slant italic)))))
+
 (use-package ef-themes
-  :config
-  (load-theme 'ef-night t)
+  ;; :config
+  ;; (load-theme 'ef-night t)
   )
 
 (use-package catppuccin-theme
@@ -215,7 +221,9 @@ named arguments:
   :ensure t
   :config
   ;; Enable a Doom theme of your choice
-  ;; (load-theme 'doom-one t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
+  ;; (load-theme 'doom-tokyo-night t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
+
+  (load-theme 'doom-solarized-light t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
 
   ;; ── Enable Doom theme integrations ──
   ;; (doom-themes-visual-bell-config)    ; Flash modeline on errors
@@ -324,11 +332,6 @@ named arguments:
     "d L" '(describe-language-environment :wk "Describe language environment")
     "d m" '(describe-mode :wk "Describe mode")
     "d p" '(describe-package :wk "Describe a package")
-    "d R" '(:ignore t :wk "Reload")
-    "d R r" '((lambda () (interactive)
-                (load-file "~/.config/emacs/init.el"))
-              :wk "Reload emacs config")
-    "d t" '(consult-theme :wk "Load theme")
     "d v" '(describe-variable :wk "Describe variable")
     "d w" '(where-is :wk "Prints keybinding for command if set")
     "d x" '(describe-command :wk "Display full documentation for command"))
@@ -384,7 +387,16 @@ named arguments:
     "g s" '(magit-stage-file :wk "Git stage file")
     "g t" '(git-timemachine :wk "Git time machine")
     "g u" '(magit-stage-file :wk "Git unstage file"))
- 
+
+  (wk/leader-keys
+    "h" '(:igonre t :wk "Hot")
+    "h r" '(:ignore t :wk "Reload")
+    "h r r" '((lambda () (interactive)
+                (load-file "~/.config/emacs/init.el"))
+              :wk "Reload emacs config")
+    "h t" '(consult-theme :wk "Load theme"))
+  
+  
   (wk/leader-keys
     "i" '(package-install :wk "Package Installer"))
 
@@ -508,7 +520,8 @@ named arguments:
 * Customization of Frame Alist
 #+begin_src emacs-lisp
 
-(add-to-list 'default-frame-alist '(font . "Menlo-15"))
+;; (add-to-list 'default-frame-alist '(font . "Fira Code iScript-18"))
+(add-to-list 'default-frame-alist '(font . "Menlo-18"))
 
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 
@@ -670,7 +683,7 @@ named arguments:
 
 (use-package corfu
   :custom
-  (corfu-auto nil)
+  (corfu-auto t)
   (corfu-cycle t)
   (corfu-preselect-first nil)
   :init
@@ -712,7 +725,7 @@ named arguments:
 (setq completion-cycle-threshold 3)
 (setq read-extended-command-predicate #'command-completion-default-include-p)
 
-  #+end_src
+#+end_src
 
 ** Icons
 #+begin_src emacs-lisp
@@ -956,7 +969,7 @@ named arguments:
   :config
   ;; General LSP settings
   (setq lsp-completion-provider :none)  ;; We use Corfu for completion
-  (setq lsp-headerline-breadcrumb-enable t)
+  (setq lsp-headerline-breadcrumb-enable nil)
   (setq lsp-modeline-code-actions-enable t)
   (setq lsp-modeline-diagnostics-enable t)
   (setq lsp-signature-auto-activate t)
@@ -1032,12 +1045,6 @@ named arguments:
   :after (lsp-mode consult)
   :config
   (define-key lsp-mode-map [remap xref-find-apropos] #'consult-lsp-symbols))
-
-;; LSP origami for code folding
-(use-package lsp-origami
-  :ensure t
-  :after lsp-mode
-  :hook (lsp-mode . lsp-origami-try-enable))
 
 ;; Flycheck integration with LSP
 (use-package flycheck
@@ -1473,18 +1480,18 @@ named arguments:
 #+begin_src emacs-lisp
 
 ;;; ── Visual indentation guides ──
-(use-package indent-guide
-  :hook (prog-mode . indent-guide-mode)
-  :config
-  (setq indent-guide-char "│"))
-
-;; (use-package highlight-indent-guides
-;;   :ensure t
-;;   :hook (prog-mode . highlight-indent-guides-mode)
+;; (use-package indent-guide
+;;   :hook (prog-mode . indent-guide-mode)
 ;;   :config
-;;   (setq highlight-indent-guides-method 'character)
-;;   (setq highlight-indent-guides-character ?│)
-;;   (setq highlight-indent-guides-auto-enabled nil))
+;;   (setq indent-guide-char "│"))
+
+(use-package highlight-indent-guides
+  :ensure t
+  :hook (prog-mode . highlight-indent-guides-mode)
+  :config
+  (setq highlight-indent-guides-method 'character)
+  (setq highlight-indent-guides-character ?│)
+  (setq highlight-indent-guides-auto-enabled nil))
 
 ;; ── Colorful delimiter pairs ──
 (use-package rainbow-delimiters
@@ -1542,9 +1549,59 @@ named arguments:
 
 * Beacon
 
+#+begin_src emacs-lisp
+
 (use-package beacon
   :config
   (beacon-mode 1))
 
 #+end_src
 
+* HideShow Mode Settings
+#+begin_src emacs-lisp
+
+(use-package hideshow
+  :ensure nil  ; Built-in package
+  :hook (prog-mode . hs-minor-mode)
+  :config
+  ;; Hide the indicators on the left fringe
+  (setq hs-hide-comments-when-hiding-all nil)
+  
+  ;; Custom function to toggle block like origami
+  (defun my/hs-toggle-node ()
+    "Toggle hideshow folding, but use org-cycle in org-mode."
+    (interactive)
+    (if (equal major-mode 'org-mode)
+        (org-cycle)
+      (save-excursion
+        (end-of-line)
+        (hs-toggle-hiding))))
+
+  (defun my/hs-toggle-all ()
+    "Toggle between hide-all and show-all."
+    (interactive)
+    (if (hs-already-hidden-p)
+	(hs-show-all)
+      (hs-hide-all)))
+
+  ;; Evil keybindings (Vim-style)
+  (with-eval-after-load 'evil
+    ;; TAB to toggle current block
+    (evil-define-key 'normal prog-mode-map (kbd "<tab>") 'my/hs-toggle-node)
+    
+    ;; C-TAB to toggle all blocks
+    (evil-define-key 'normal prog-mode-map (kbd "C-<tab>") 'my/hs-toggle-all)
+    
+    ;; Traditional Vim fold keybindings
+    (define-key evil-normal-state-map "za" 'my/hs-toggle-node)
+    (define-key evil-normal-state-map "zA" 'hs-show-block)
+    (define-key evil-normal-state-map "zc" 'hs-hide-block)
+    (define-key evil-normal-state-map "zC" 'hs-hide-level)
+    (define-key evil-normal-state-map "zo" 'hs-show-block)
+    (define-key evil-normal-state-map "zO" 'hs-show-all)
+    (define-key evil-normal-state-map "zM" 'hs-hide-all)
+    (define-key evil-normal-state-map "zR" 'hs-show-all)
+    (define-key evil-normal-state-map "zm" 'hs-hide-level)
+    (define-key evil-normal-state-map "zr" 'hs-show-all)))
+
+#+end_src
