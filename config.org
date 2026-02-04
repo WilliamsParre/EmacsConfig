@@ -176,8 +176,52 @@ named arguments:
 ** Electric Configuration
 #+begin_src emacs-lisp
 
-(delete-selection-mode 1)    ;; You can select text and delete it by typing.
-(electric-indent-mode 1)    ;; Turn On/Off the indention that Emacs does by default.
+;; ── Core electric modes ──
+(delete-selection-mode 1)
+(electric-indent-mode 1)
+(electric-pair-mode 1)
+
+;; ── Enhanced electric pair configuration ──
+(setq electric-pair-pairs
+      '((?\" . ?\")
+        (?\{ . ?\})
+        (?\[ . ?\])
+        (?\( . ?\))))
+
+;; Make electric-pair-mode work better with newlines
+(setq electric-pair-open-newline-between-pairs t)
+(setq electric-pair-delete-adjacent-pairs t)
+
+;; ── Smart newline behavior for braces ──
+(defun my/electric-pair-post-self-insert ()
+  "Automatically add newline and indent between braces."
+  (when (and (eq (char-before) ?\{)
+             (eq (char-after) ?\}))
+    (newline)
+    (indent-according-to-mode)
+    (forward-line -1)
+    (indent-according-to-mode)))
+
+(add-hook 'post-self-insert-hook #'my/electric-pair-post-self-insert)
+
+;; ── Better indentation settings ──
+(setq-default indent-tabs-mode nil)
+(setq-default tab-width 4)
+(setq-default evil-shift-width 4)
+
+;; ── Fix RET key to always indent properly ──
+(defun my/newline-and-indent ()
+  "Insert a newline, then indent according to major mode."
+  (interactive)
+  (newline)
+  (indent-according-to-mode))
+
+;; Bind in both insert and normal mode
+(global-set-key (kbd "RET") 'my/newline-and-indent)
+
+;; Also bind for evil insert mode specifically
+(with-eval-after-load 'evil
+  (define-key evil-insert-state-map (kbd "RET") 'my/newline-and-indent))
 
 #+end_src
 
@@ -690,9 +734,14 @@ named arguments:
   (global-corfu-mode)
   :bind
   (:map corfu-map
-        ("TAB" . corfu-next)
-        ("<tab>" . corfu-next)
-        ("S-TAB" . corfu-previous)))
+        ("M-SPC" . corfu-insert-separator)
+        ("TAB"     . corfu-next)               ;; TAB moves to next
+        ([tab]     . corfu-next)               ;; TAB moves to next
+        ("S-TAB"   . corfu-previous)           ;; Shift-TAB moves to previous
+        ([backtab] . corfu-previous)           ;; Shift-TAB moves to previous
+        ("RET"     . corfu-insert)             ;; ENTER selects/completes
+        ([return]  . corfu-insert))            ;; ENTER selects/completes
+  )
 
 ;; (use-package corfu
 ;;   :init
@@ -725,7 +774,7 @@ named arguments:
 (setq completion-cycle-threshold 3)
 (setq read-extended-command-predicate #'command-completion-default-include-p)
 
-#+end_src
+  #+end_src
 
 ** Icons
 #+begin_src emacs-lisp
@@ -913,7 +962,7 @@ named arguments:
         doom-modeline-buffer-state-icon t
         doom-modeline-checker-simple-format t
         doom-modeline-indent-info t
-	)
+	    )
   )
 
 #+end_src
@@ -922,7 +971,7 @@ named arguments:
 ** Base LSP Setup
 #+begin_src emacs-lisp
 
-					; (setq lsp-use-plists t)
+                                        ; (setq lsp-use-plists t)
 ;; (setenv "LSP_USE_PLISTS" "true")
 ;;
 ;; (defun lsp-booster--advice-json-parse (old-fn &rest args)
@@ -1581,7 +1630,7 @@ named arguments:
     "Toggle between hide-all and show-all."
     (interactive)
     (if (hs-already-hidden-p)
-	(hs-show-all)
+	    (hs-show-all)
       (hs-hide-all)))
 
   ;; Evil keybindings (Vim-style)
