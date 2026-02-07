@@ -41,7 +41,9 @@
 - [[#vterm][Vterm]]
 - [[#load-manually-installed-packages][Load Manually Installed Packages]]
 - [[#beacon][Beacon]]
-- [[#hideshow-mode-settings][HideShow Mode Settings]]
+- [[#hideshow-mode][HideShow Mode]]
+- [[#centaur-tabs][Centaur Tabs]]
+- [[#github-copilot][GitHub Copilot]]
 
 * Package Manager
 #+begin_src emacs-lisp
@@ -727,21 +729,41 @@ named arguments:
 
 (use-package corfu
   :custom
-  (corfu-auto t)
-  (corfu-cycle t)
-  (corfu-preselect-first nil)
+  ;; Core settings
+  (corfu-auto nil)                     ;; Manual completion trigger
+  (corfu-auto-delay 0.0)               ;; Instant popup if auto enabled
+  (corfu-auto-prefix 2)                ;; Minimum prefix length for auto completion
+  
+  ;; Cycling and selection
+  (corfu-cycle t)                      ;; Enable cycling for `corfu-next/previous'
+  (corfu-preselect 'prompt)            ;; Preselect the prompt
+  
+  ;; UI appearance
+  (corfu-min-width 25)
+  (corfu-max-width 100)
+  (corfu-count 10)                     ;; Number of candidates to show
+  (corfu-scroll-margin 5)              ;; Scroll margin
+  
+  ;; Popup behavior
+  (corfu-quit-at-boundary 'separator)  ;; Quit at completion boundary
+  (corfu-quit-no-match 'separator)     ;; Quit if no match
+  (corfu-preview-current nil)          ;; Don't preview current candidate
+  (corfu-on-exact-match nil)           ;; Don't auto-complete on exact match
+  
   :init
   (global-corfu-mode)
+  
   :bind
   (:map corfu-map
-        ("M-SPC" . corfu-insert-separator)
-        ("TAB"     . corfu-next)               ;; TAB moves to next
-        ([tab]     . corfu-next)               ;; TAB moves to next
-        ("S-TAB"   . corfu-previous)           ;; Shift-TAB moves to previous
-        ([backtab] . corfu-previous)           ;; Shift-TAB moves to previous
-        ("RET"     . corfu-insert)             ;; ENTER selects/completes
-        ([return]  . corfu-insert))            ;; ENTER selects/completes
-  )
+        ("TAB"        . corfu-next)
+        ([tab]        . corfu-next)
+        ("S-TAB"      . corfu-previous)
+        ([backtab]    . corfu-previous)
+        ("RET"        . corfu-insert)
+        ([return]     . corfu-insert)
+        ("M-SPC"      . corfu-insert-separator)
+        ("C-n"        . corfu-next)
+        ("C-p"        . corfu-previous)))
 
 ;; (use-package corfu
 ;;   :init
@@ -774,7 +796,7 @@ named arguments:
 (setq completion-cycle-threshold 3)
 (setq read-extended-command-predicate #'command-completion-default-include-p)
 
-  #+end_src
+#+end_src
 
 ** Icons
 #+begin_src emacs-lisp
@@ -1606,7 +1628,8 @@ named arguments:
 
 #+end_src
 
-* HideShow Mode Settings
+* HideShow Mode
+Settings
 #+begin_src emacs-lisp
 
 (use-package hideshow
@@ -1654,3 +1677,35 @@ named arguments:
     (define-key evil-normal-state-map "zr" 'hs-show-all)))
 
 #+end_src
+
+* Centaur Tabs
+#+begin_src emacs-lisp
+
+(use-package centaur-tabs
+  :demand
+  :config
+  (centaur-tabs-mode t)
+  :bind
+  ("C-<prior>" . centaur-tabs-backward)
+  ("C-<next>" . centaur-tabs-forward))
+
+#+end_src
+
+* GitHub Copilot
+#+begin_src emacs-lisp
+
+(use-package track-changes)
+
+(use-package copilot
+  :hook (prog-mode . copilot-mode)
+  :bind (:map copilot-completion-map
+              ("<tab>" . copilot-accept-completion)
+              ("TAB" . copilot-accept-completion)
+              ("C-<tab>" . copilot-accept-completion-by-word)
+              ("C-n" . copilot-next-completion)
+              ("C-p" . copilot-previous-completion))
+  :config
+  (add-to-list 'copilot-disable-predicates #'(lambda () (derived-mode-p 'org-mode))))
+
+#+end_src
+
