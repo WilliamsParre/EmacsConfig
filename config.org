@@ -44,6 +44,7 @@
 - [[#hideshow-mode][HideShow Mode]]
 - [[#centaur-tabs][Centaur Tabs]]
 - [[#github-copilot][GitHub Copilot]]
+- [[#file-organization--cleanup][File Organization & Cleanup]]
 
 * Package Manager
 #+begin_src emacs-lisp
@@ -529,13 +530,17 @@ named arguments:
     "s w" '(woman :wk "Similar to man but doesn't require man"))
 
   (wk/leader-keys
-    "t" '(:ignore t :wk "Toggle")
+    "t" '(:ignore t :wk "Toggle/Tabs")
     "t f" '(flycheck-mode :wk "Toggle flycheck")
-    "t l" '(display-line-numbers-mode :wk "Toggle line numbers")
-    "t n" '(neotree-toggle :wk "Toggle neotree file viewer")
+    "t L" '(display-line-numbers-mode :wk "Toggle line numbers")
     "t o" '(org-mode :wk "Toggle org mode")
     "t r" '(rainbow-mode :wk "Toggle rainbow mode")
-    "t t" '(visual-line-mode :wk "Toggle truncated lines"))
+    "t t" '(visual-line-mode :wk "Toggle truncated lines")
+    "t l" '(centaur-tabs-forward :wk "Next tab")
+    "t h" '(centaur-tabs-backward :wk "Previous tab")
+    "t k" '(centaur-tabs--kill-this-buffer-dont-ask :wk "Kill tab")
+    "t s" '(centaur-tabs-counsel-switch-group :wk "Switch tab group")
+    "t d" '(centaur-tabs-switch-group :wk "Display groups"))
 
   (wk/leader-keys
     "w" '(:ignore t :wk "Windows")
@@ -562,7 +567,7 @@ named arguments:
     "y n" '(yas-new-snippet :wk "Create new YASnippet"))
   )
 
-#+end_src
+  #+end_src
 * Customization of Frame Alist
 #+begin_src emacs-lisp
 
@@ -1685,9 +1690,16 @@ Settings
   :demand
   :config
   (centaur-tabs-mode t)
-  :bind
-  ("C-<prior>" . centaur-tabs-backward)
-  ("C-<next>" . centaur-tabs-forward))
+  (centaur-tabs-headline-match)
+  (setq centaur-tabs-height 32)
+  (setq centaur-tabs-set-icons t)
+  (setq centaur-tabs-icon-type 'nerd-icons)
+  (setq centaur-tabs-gray-out-icons 'buffer)
+  (setq centaur-tabs-set-modified-marker t)
+  (setq centaur-tabs-modified-marker "●")
+  (setq centaur-tabs-label-fixed-length 15)
+  (setq centaur-tabs-show-navigation-buttons t)
+  (setq centaur-tabs-show-new-tab-button t))
 
 #+end_src
 
@@ -1709,3 +1721,30 @@ Settings
 
 #+end_src
 
+* File Organization & Cleanup
+#+begin_src emacs-lisp
+
+(use-package no-littering
+  :demand t
+  :config
+  (setq auto-save-file-name-transforms
+        `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
+  
+  (setq custom-file (no-littering-expand-etc-file-name "custom.el"))
+  
+  (setq create-lockfiles nil)
+  
+  (setq backup-by-copying t
+        delete-old-versions t
+        kept-new-versions 6
+        kept-old-versions 2
+        version-control t))
+
+(use-package super-save
+  :config
+  (super-save-mode +1)
+  (setq super-save-auto-save-when-idle t)
+  (setq super-save-idle-duration 5)
+  (setq super-save-remote-files nil))
+
+#+end_src
