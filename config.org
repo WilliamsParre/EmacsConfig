@@ -9,6 +9,7 @@
   - [[#defaults][Defaults]]
   - [[#electric-configuration][Electric Configuration]]
   - [[#custom-requirements][Custom Requirements]]
+- [[#file-organization--cleanup][File Organization & Cleanup]]
 - [[#themes][Themes]]
 - [[#general-key-bindings][General Key Bindings]]
 - [[#customization-of-frame-alist][Customization of Frame Alist]]
@@ -44,7 +45,6 @@
 - [[#hideshow-mode][HideShow Mode]]
 - [[#centaur-tabs][Centaur Tabs]]
 - [[#github-copilot][GitHub Copilot]]
-- [[#file-organization--cleanup][File Organization & Cleanup]]
 
 * Package Manager
 #+begin_src emacs-lisp
@@ -246,6 +246,44 @@ named arguments:
 
 #+end_src
 
+* File Organization & Cleanup
+#+begin_src emacs-lisp
+
+(use-package no-littering
+  :demand t
+  :config
+  (let ((backup-dir (no-littering-expand-var-file-name "backup/")))
+    (unless (file-directory-p backup-dir)
+      (make-directory backup-dir t))
+    (setq backup-directory-alist `(("." . ,backup-dir))))
+  
+  (let ((auto-save-dir (no-littering-expand-var-file-name "auto-save/")))
+    (unless (file-directory-p auto-save-dir)
+      (make-directory auto-save-dir t))
+    (setq auto-save-file-name-transforms
+          `((".*" ,auto-save-dir t))))
+  
+  (setq custom-file (no-littering-expand-etc-file-name "custom.el"))
+  
+  (setq create-lockfiles nil)
+  
+  (setq backup-by-copying t
+        delete-old-versions t
+        kept-new-versions 6
+        kept-old-versions 2
+        version-control t)
+  
+  (setq vc-make-backup-files nil))
+
+(use-package super-save
+  :config
+  (super-save-mode +1)
+  (setq super-save-auto-save-when-idle t)
+  (setq super-save-idle-duration 5)
+  (setq super-save-remote-files nil)
+  (setq super-save-silent t))
+
+#+end_src
 * Themes
 #+begin_src emacs-lisp
 
@@ -1721,30 +1759,3 @@ Settings
 
 #+end_src
 
-* File Organization & Cleanup
-#+begin_src emacs-lisp
-
-(use-package no-littering
-  :demand t
-  :config
-  (setq auto-save-file-name-transforms
-        `((".*" ,(no-littering-expand-var-file-name "auto-save/") t)))
-  
-  (setq custom-file (no-littering-expand-etc-file-name "custom.el"))
-  
-  (setq create-lockfiles nil)
-  
-  (setq backup-by-copying t
-        delete-old-versions t
-        kept-new-versions 6
-        kept-old-versions 2
-        version-control t))
-
-(use-package super-save
-  :config
-  (super-save-mode +1)
-  (setq super-save-auto-save-when-idle t)
-  (setq super-save-idle-duration 5)
-  (setq super-save-remote-files nil))
-
-#+end_src
