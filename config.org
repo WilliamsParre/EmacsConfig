@@ -6,6 +6,7 @@
 - [[#package-manager][Package Manager]]
   - [[#auto][Auto]]
 - [[#basic-settings][Basic Settings]]
+  - [[#garbage-collection-magic-hack][Garbage Collection Magic Hack]]
   - [[#defaults][Defaults]]
   - [[#electric-configuration][Electric Configuration]]
   - [[#custom-requirements][Custom Requirements]]
@@ -36,7 +37,6 @@
   - [[#cc-lsp-configuration][C/C++ LSP Configuration]]
   - [[#java-lsp-configuration][Java LSP Configuration]]
   - [[#macos-specific-lsp-configuration][macOS-Specific LSP Configuration]]
-- [[#format-all][Format All]]
 - [[#packages-to-enhance-prog-mode-ui][Packages to enhance Prog Mode UI]]
 - [[#flycheck][Flycheck]]
 - [[#vterm][Vterm]]
@@ -45,6 +45,16 @@
 - [[#hideshow-mode][HideShow Mode]]
 - [[#centaur-tabs][Centaur Tabs]]
 - [[#github-copilot][GitHub Copilot]]
+- [[#diff-hl][Diff-HL]]
+- [[#apheleia][Apheleia]]
+- [[#editorconfig][EditorConfig]]
+- [[#ws-butler][WS-Butler]]
+- [[#magit--git-timemachine][Magit & Git Timemachine]]
+- [[#sudo-edit][Sudo Edit]]
+- [[#projectile][Projectile]]
+- [[#nerd-icons-dired][Nerd Icons Dired]]
+- [[#helpful][Helpful]]
+- [[#startup-time][Startup Time]]
 
 * Package Manager
 #+begin_src emacs-lisp
@@ -86,8 +96,24 @@
 #+end_src
 
 * Basic Settings
+** Garbage Collection Magic Hack
+#+begin_src emacs-lisp
+
+;; (setq gc-cons-threshold (* 128 1024 1024))
+;; (add-hook 'emacs-startup-hook
+;;           (lambda () (setq gc-cons-threshold (* 16 1024 1024))))
+
+(use-package gcmh
+  :init
+  (gcmh-mode 1))
+
+#+end_src
+
 ** Defaults
 #+begin_src emacs-lisp
+;; ── Faster process output (critical for LSP) ──
+(setq read-process-output-max (* 4 1024 1024))  ; 8MB
+
 ;; ── Disable startup distractions ──
 (setq inhibit-startup-message t
       use-dialog-box nil
@@ -122,10 +148,18 @@
 (setq byte-compile-warnings '(cl-functions))
 
 ;; ── Environment path integration ──
-(use-package exec-path-from-shell
-  :straight t
-  :config
-  (exec-path-from-shell-initialize))
+;; (use-package exec-path-from-shell
+;;   :straight t
+;;   :config
+;;   (setq exec-path-from-shell-arguments '("-l"))  ; login shell, not interactive — ~10x faster
+;;   (exec-path-from-shell-initialize))
+
+;; ── Hardcode Homebrew PATH directly — no shell spawning needed ──
+(setenv "PATH" (concat "/opt/homebrew/bin:/opt/homebrew/sbin:"
+                       (getenv "PATH")))
+(setq exec-path (append '("/opt/homebrew/bin"
+                          "/opt/homebrew/sbin")
+                        exec-path))
 
 ;; macOS-Specific Configurations
 (when (eq system-type 'darwin)
@@ -236,12 +270,13 @@
   (setq vc-make-backup-files nil))
 
 (use-package super-save
+  :defer t
+  :hook (after-init . super-save-mode)
   :config
-  (super-save-mode +1)
-  (setq super-save-auto-save-when-idle t)
-  (setq super-save-idle-duration 5)
-  (setq super-save-remote-files nil)
-  (setq super-save-silent t))
+  (setq super-save-auto-save-when-idle t
+        super-save-idle-duration 5
+        super-save-remote-files nil
+        super-save-silent t))
 
 #+end_src
 * Themes
@@ -351,6 +386,12 @@
   :after evil
   :init
   (evil-commentary-mode))
+
+(use-package evil-lion
+  :straight t
+  :after evil
+  :config
+  (evil-lion-mode))
 
 #+end_src
 
@@ -601,7 +642,6 @@
     "t f" '(flycheck-mode :wk "Toggle flycheck")
     "t L" '(display-line-numbers-mode :wk "Toggle line numbers")
     "t o" '(org-mode :wk "Toggle org mode")
-    "t r" '(rainbow-mode :wk "Toggle rainbow mode")
     "t t" '(visual-line-mode :wk "Toggle truncated lines")
     "t l" '(centaur-tabs-forward :wk "Next tab")
     "t h" '(centaur-tabs-backward :wk "Previous tab")
@@ -649,11 +689,12 @@
 #+begin_src emacs-lisp
 
 (use-package which-key
-  :defer 0
+  :defer t
   :diminish which-key-mode
+  :hook (after-init . which-key-mode)
   :config
-  (which-key-mode 1)
-  (setq which-key-idle-delay 1))
+  (setq which-key-idle-delay 0.5
+        which-key-idle-secondary-delay 0.01))
 
 #+end_src
 
@@ -856,6 +897,10 @@
   :config
   (global-set-key (kbd "C-s") 'consult-line))
 
+(use-package consult-projectile
+  :straight t
+  :after (consult projectile))
+
 #+end_src
 
 * Org Mode Configuration
@@ -941,10 +986,10 @@
 
 (use-package pdf-tools
   :straight t
+  :defer t
+  :magic ("%PDF" . pdf-view-mode)
   :config
-  (pdf-tools-install) ;; automatically sets up pdf-tools
-  ;; (setq-default pdf-view-display-size 'fit-page)
-  )
+  (pdf-tools-install :no-query))  ; silent install, only when a PDF is opened
 
 #+end_src
 
@@ -952,11 +997,11 @@
 #+begin_src emacs-lisp
 
 (use-package yasnippet
+  :defer t
   :hook ((prog-mode text-mode LaTeX-mode latex-mode) . yas-minor-mode)
   :config
   (setq yas-snippet-dirs '("~/.config/doom/snippets/"))
-  (yas-reload-all)
-  (yas-global-mode 1))
+  (yas-reload-all))  ; removed yas-global-mode — the hook above handles activation
 
 #+end_src
 
@@ -965,7 +1010,7 @@
 
 (use-package doom-modeline
   :straight t
-  :init (doom-modeline-mode 1)
+  :hook (after-init . doom-modeline-mode)
   :config
   ;; Optional tweaks to mimic Doom Emacs exactly
   (setq doom-modeline-height 30
@@ -1540,20 +1585,6 @@
 
 #+end_src
 
-* Format All
-#+begin_src emacs-lisp
-
-(use-package format-all
-  :commands format-all-mode
-  :hook (prog-mode . format-all-mode)
-  :config
-  (setq-default format-all-formatters
-                '(("C" (clang-format))
-                  ("C++" (clang-format))
-                  ("Python" (black)))))
-
-#+end_src
-
 * Packages to enhance Prog Mode UI
 #+begin_src emacs-lisp
 
@@ -1630,8 +1661,8 @@
 #+begin_src emacs-lisp
 
 (use-package beacon
-  :config
-  (beacon-mode 1))
+  :defer t
+  :hook (after-init . beacon-mode))
 
 #+end_src
 
@@ -1723,3 +1754,122 @@ Settings
 
 #+end_src
 
+* Diff-HL
+#+begin_src emacs-lisp
+
+(use-package diff-hl
+  :straight t
+  :hook (after-init . global-diff-hl-mode)
+  :config
+  (diff-hl-flydiff-mode 1)
+  (diff-hl-margin-mode 1)
+  (add-hook 'magit-pre-refresh-hook  #'diff-hl-magit-pre-refresh)
+  (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh)
+  (add-hook 'dired-mode-hook #'diff-hl-dired-mode)
+  (setq diff-hl-side 'left
+        diff-hl-draw-borders nil))
+
+#+end_src
+
+* Apheleia
+#+begin_src emacs-lisp
+
+(use-package apheleia
+  :straight t
+  :hook (prog-mode . apheleia-mode)
+  :config
+  (setf (alist-get 'python-mode apheleia-mode-alist) '(black isort))
+  (setf (alist-get 'c-mode      apheleia-mode-alist) '(clang-format))
+  (setf (alist-get 'c++-mode    apheleia-mode-alist) '(clang-format))
+  (setf (alist-get 'black apheleia-formatters)
+        '("black" "--line-length" "88" "-")))
+
+#+end_src
+
+* EditorConfig
+#+begin_src emacs-lisp
+
+(use-package editorconfig
+  :straight t
+  :hook (after-init . editorconfig-mode))
+
+#+end_src
+
+* WS-Butler
+#+begin_src emacs-lisp
+
+(use-package ws-butler
+  :straight t
+  :hook (prog-mode . ws-butler-mode)
+  :config
+  (setq ws-butler-keep-whitespace-before-point nil))
+
+#+end_src
+
+* Magit & Git Timemachine
+#+begin_src emacs-lisp
+
+(use-package magit
+  :straight t
+  :commands magit-status)
+
+(use-package git-timemachine
+  :straight t
+  :commands git-timemachine)
+
+#+end_src
+
+* Sudo Edit
+#+begin_src emacs-lisp
+
+(use-package sudo-edit
+  :straight t
+  :commands (sudo-edit sudo-edit-find-file))
+
+#+end_src
+
+* Projectile 
+#+begin_src emacs-lisp
+
+(use-package projectile
+  :straight t
+  :init
+  (projectile-mode +1)
+  :config
+  (setq projectile-completion-system 'auto))
+
+#+end_src
+
+* Nerd Icons Dired
+#+begin_src emacs-lisp
+
+(use-package nerd-icons-dired
+  :straight t
+  :hook (dired-mode . nerd-icons-dired-mode))
+
+#+end_src
+
+* Helpful
+#+begin_src emacs-lisp
+
+(use-package helpful
+  :straight t
+  :bind
+  ([remap describe-function] . helpful-callable)
+  ([remap describe-variable] . helpful-variable)
+  ([remap describe-key]      . helpful-key)
+  ([remap describe-command]  . helpful-command))
+
+#+end_src
+
+* Startup Time
+#+begin_src emacs-lisp
+
+(defun wp/display-startup-time ()
+  (message "Emacs loaded in %s with %d garbage collections."
+           (format "%.2f seconds"
+                   (float-time (time-subtract after-init-time before-init-time)))
+           gcs-done))
+(add-hook 'emacs-startup-hook #'wp/display-startup-time)
+
+#+end_src
