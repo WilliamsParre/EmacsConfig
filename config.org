@@ -4,16 +4,16 @@
 
 * Table Of Contents :toc:
 - [[#package-manager][Package Manager]]
-- [[#wrapper-using-package-vc][Wrapper using package-vc]]
+  - [[#auto][Auto]]
 - [[#basic-settings][Basic Settings]]
   - [[#defaults][Defaults]]
   - [[#electric-configuration][Electric Configuration]]
   - [[#custom-requirements][Custom Requirements]]
 - [[#file-organization--cleanup][File Organization & Cleanup]]
 - [[#themes][Themes]]
+- [[#evil-mode][Evil Mode]]
 - [[#general-key-bindings][General Key Bindings]]
 - [[#customization-of-frame-alist][Customization of Frame Alist]]
-- [[#evil-mode][Evil Mode]]
 - [[#whichkey][WhichKey]]
 - [[#vertico][Vertico]]
 - [[#marginalia][Marginalia]]
@@ -48,82 +48,40 @@
 
 * Package Manager
 #+begin_src emacs-lisp
-(defvar elpaca-installer-version 0.11)
-(defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
-(defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
-(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
-(defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
-                              :ref nil :depth 1 :inherit ignore
-                              :files (:defaults "elpaca-test.el" (:exclude "extensions"))
-                              :build (:not elpaca--activate-package)))
-(let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
-       (build (expand-file-name "elpaca/" elpaca-builds-directory))
-       (order (cdr elpaca-order))
-       (default-directory repo))
-  (add-to-list 'load-path (if (file-exists-p build) build repo))
-  (unless (file-exists-p repo)
-    (make-directory repo t)
-    (when (<= emacs-major-version 28) (require 'subr-x))
-    (condition-case-unless-debug err
-        (if-let* ((buffer (pop-to-buffer-same-window "*elpaca-bootstrap*"))
-                  ((zerop (apply #'call-process `("git" nil ,buffer t "clone"
-                                                  ,@(when-let* ((depth (plist-get order :depth)))
-                                                      (list (format "--depth=%d" depth) "--no-single-branch"))
-                                                  ,(plist-get order :repo) ,repo))))
-                  ((zerop (call-process "git" nil buffer t "checkout"
-                                        (or (plist-get order :ref) "--"))))
-                  (emacs (concat invocation-directory invocation-name))
-                  ((zerop (call-process emacs nil buffer nil "-Q" "-L" "." "--batch"
-                                        "--eval" "(byte-recompile-directory \".\" 0 'force)")))
-                  ((require 'elpaca))
-                  ((elpaca-generate-autoloads "elpaca" repo)))
-            (progn (message "%s" (buffer-string)) (kill-buffer buffer))
-          (error "%s" (with-current-buffer buffer (buffer-string))))
-      ((error) (warn "%s" err) (delete-directory repo 'recursive))))
-  (unless (require 'elpaca-autoloads nil t)
-    (require 'elpaca)
-    (elpaca-generate-autoloads "elpaca" repo)
-    (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
-(add-hook 'after-init-hook #'elpaca-process-queues)
-(elpaca `(,@elpaca-order))
 
-;; ── Enable symlink mode for systems that cannot create symlinks ──
-(elpaca-no-symlink-mode)
+(defvar bootstrap-version)
+(let ((bootstrap-file
+       (expand-file-name
+        "straight/repos/straight.el/bootstrap.el"
+        (or (bound-and-true-p straight-base-dir)
+            user-emacs-directory)))
+      (bootstrap-version 7))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer
+        (url-retrieve-synchronously
+         "https://raw.githubusercontent.com/radian-software/straight.el/develop/install.el"
+         'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
 
-;; ── Install use-package support ──
-(elpaca elpaca-use-package
-  ;; Enable use-package :ensure support for Elpaca.
-  (elpaca-use-package-mode)
-  (setq elpaca-use-package-by-default t))
+(straight-use-package 'use-package)
 
-(elpaca-wait)
+(setq straight-use-package-by-default t)
 
 #+end_src
 
-* Wrapper using package-vc
+** Auto
 #+begin_src emacs-lisp
 
-(require 'cl-lib)
-
-(cl-defun slot/vc-install (&key (fetcher "github") repo name rev backend)
-  "Install a package from a remote if it's not already installed.
-This is a thin wrapper around `package-vc-install' in order to
-make non-interactive usage more ergonomic.  Takes the following
-named arguments:
-
-- FETCHER the remote where to get the package (e.g., \"gitlab\").
-  If omitted, this defaults to \"github\".
-
-- REPO should be the name of the repository (e.g.,
-  \"slotThe/arXiv-citation\".
-
-- NAME, REV, and BACKEND are as in `package-vc-install' (which
-  see)."
-  (let* ((url (format "https://www.%s.com/%s" fetcher repo))
-         (iname (when name (intern name)))
-         (pac-name (or iname (intern (file-name-base repo)))))
-    (unless (package-installed-p pac-name)
-      (package-vc-install url iname rev backend))))
+(use-package auto-package-update
+  :custom
+  (auto-package-update-interval 7)
+  (auto-package-update-prompt-before-update t)
+  (auto-package-update-hide-results t)
+  :config
+  (auto-package-update-maybe)
+  (auto-package-update-at-time "09:00"))
 
 #+end_src
 
@@ -136,11 +94,13 @@ named arguments:
       ring-bell-function 'ignore)
 
 ;; ── Clean interface ──
-(scroll-bar-mode -1)
-(tool-bar-mode -1)
-(tooltip-mode -1)
+(when (display-graphic-p)
+  (scroll-bar-mode -1)
+  (tool-bar-mode -1)
+  (tooltip-mode -1)
+  (set-fringe-mode 10))
+
 (menu-bar-mode -1)
-(set-fringe-mode 10)
 
 ;; ── Programming enhancements ──
 (add-hook 'prog-mode-hook 'display-line-numbers-mode)
@@ -163,7 +123,7 @@ named arguments:
 
 ;; ── Environment path integration ──
 (use-package exec-path-from-shell
-  :ensure t
+  :straight t
   :config
   (exec-path-from-shell-initialize))
 
@@ -232,14 +192,14 @@ named arguments:
 #+begin_src emacs-lisp
 
 (use-package emacs
-  :ensure nil
+  :straight nil
   :init
   (defalias 'yes-or-no-p 'y-or-n-p))
 
 (setq confirm-kill-emacs 'y-or-n-p)
 
 (use-package emacs
-  :ensure nil
+  :straight nil
   :init
   (defun display-startup-echo-area-message ()
     (message "")))
@@ -292,18 +252,18 @@ named arguments:
  '(font-lock-type-face ((t (:slant italic))))
  '(font-lock-comment-face ((t (:slant italic)))))
 
-(use-package ef-themes
-  ;; :config
-  ;; (load-theme 'ef-night t)
-  )
+;; (use-package ef-themes
+;;   ;; :config
+;;   ;; (load-theme 'ef-night t)
+;;   )
 
-(use-package catppuccin-theme
-  ;; :config
-  ;; (load-theme 'catppuccin t)
-  )
+;; (use-package catppuccin-theme
+;;   ;; :config
+;;   ;; (load-theme 'catppuccin t)
+;;   )
 
 (use-package doom-themes
-  :ensure t
+  :straight t
   :config
   ;; Enable a Doom theme of your choice
   ;; (load-theme 'doom-tokyo-night t)   ;; 'doom-one', 'doom-dracula', 'doom-solarized-light', etc.
@@ -316,7 +276,7 @@ named arguments:
   (doom-themes-org-config))              ; Enhanced org-mode faces
 
 (use-package all-the-icons
-  :ensure t
+  :straight t
   :if (display-graphic-p))
 
 (setq doom-themes-enable-bold t
@@ -326,11 +286,80 @@ named arguments:
 
 #+end_src
 
+* Evil Mode
+#+begin_src emacs-lisp
+
+;; Make ESC quit prompts
+(global-set-key (kbd "<escape>") 'keyboard-escape-quit)
+
+(defun my/minibuffer-custom-keys ()
+  "Set custom keybindings for minibuffer."
+  (local-set-key (kbd "C-j") 'next-line)
+  (local-set-key (kbd "C-k") 'previous-line))
+
+(add-hook 'minibuffer-setup-hook 'my/minibuffer-custom-keys)
+
+(use-package evil
+  :demand t
+  :init      ;; tweak evil's configuration before loading it
+  (setq evil-want-integration t  ;; This is optional since it's already set to t by default.
+        evil-want-keybinding nil
+        evil-vsplit-window-right t
+        evil-split-window-below t
+        evil-undo-system 'undo-redo)  ;; Adds vim-like C-r redo functionality
+  :config
+  (evil-mode 1))
+
+(use-package evil-collection
+  :demand t
+  :after evil
+  :config
+  ;; Do not uncomment this unless you want to specify each and every mode
+  ;; that evil-collection should works with.  The following line is here
+  ;; for documentation purposes in case you need it.
+  ;; (setq evil-collection-mode-list '(calendar dashboard dired ediff info magit ibuffer))
+  (add-to-list 'evil-collection-mode-list 'help) ;; evilify help mode
+  (evil-collection-init))
+
+;; Using RETURN to follow links in Org/Evil
+;; Unmap keys in 'evil-maps if not done, (setq org-return-follows-link t) will not work
+(with-eval-after-load 'evil-maps
+  (define-key evil-motion-state-map (kbd "SPC") nil)
+  (define-key evil-motion-state-map (kbd "RET") nil)
+  (define-key evil-motion-state-map (kbd "TAB") nil))
+;; Setting RETURN key in org-mode to follow links
+(setq org-return-follows-link  t)
+
+(use-package evil-surround
+  :after evil
+  :config (global-evil-surround-mode))
+
+(use-package evil-indent-textobject)
+
+(use-package evil-goggles
+  :after evil
+  :config
+  (evil-goggles-mode)
+
+  ;; optionally use diff-mode's faces; as a result, deleted text
+  ;; will be highlighed with `diff-removed` face which is typically
+  ;; some red color (as defined by the color theme)
+  ;; other faces such as `diff-added` will be used for other actions
+  (evil-goggles-use-diff-faces))
+
+(use-package evil-commentary
+  :after evil
+  :init
+  (evil-commentary-mode))
+
+#+end_src
+
 * General Key Bindings
 #+begin_src emacs-lisp
 
 (use-package general
-  :ensure (:wait t)
+  :demand t
+  :after evil
   :config
   (general-evil-setup)
 
@@ -616,71 +645,6 @@ named arguments:
 
 #+end_src
 
-* Evil Mode
-#+begin_src emacs-lisp
-
-;; Make ESC quit prompts
-(global-set-key (kbd "<escape>") 'keyboard-escape-quit)
-
-(defun my/minibuffer-custom-keys ()
-  "Set custom keybindings for minibuffer."
-  (local-set-key (kbd "C-j") 'next-line)
-  (local-set-key (kbd "C-k") 'previous-line))
-
-(add-hook 'minibuffer-setup-hook 'my/minibuffer-custom-keys)
-
-(use-package evil
-  :init      ;; tweak evil's configuration before loading it
-  (setq evil-want-integration t  ;; This is optional since it's already set to t by default.
-        evil-want-keybinding nil
-        evil-vsplit-window-right t
-        evil-split-window-below t
-        evil-undo-system 'undo-redo)  ;; Adds vim-like C-r redo functionality
-  (evil-mode))
-
-(use-package evil-collection
-  :after evil
-  :config
-  ;; Do not uncomment this unless you want to specify each and every mode
-  ;; that evil-collection should works with.  The following line is here
-  ;; for documentation purposes in case you need it.
-  ;; (setq evil-collection-mode-list '(calendar dashboard dired ediff info magit ibuffer))
-  (add-to-list 'evil-collection-mode-list 'help) ;; evilify help mode
-  (evil-collection-init))
-
-;; Using RETURN to follow links in Org/Evil
-;; Unmap keys in 'evil-maps if not done, (setq org-return-follows-link t) will not work
-(with-eval-after-load 'evil-maps
-  (define-key evil-motion-state-map (kbd "SPC") nil)
-  (define-key evil-motion-state-map (kbd "RET") nil)
-  (define-key evil-motion-state-map (kbd "TAB") nil))
-;; Setting RETURN key in org-mode to follow links
-(setq org-return-follows-link  t)
-
-(use-package evil-surround
-  :after evil
-  :config (global-evil-surround-mode))
-
-(use-package evil-indent-textobject)
-
-(use-package evil-goggles
-  :after evil
-  :config
-  (evil-goggles-mode)
-
-  ;; optionally use diff-mode's faces; as a result, deleted text
-  ;; will be highlighed with `diff-removed` face which is typically
-  ;; some red color (as defined by the color theme)
-  ;; other faces such as `diff-added` will be used for other actions
-  (evil-goggles-use-diff-faces))
-
-(use-package evil-commentary
-  :after evil
-  :init
-  (evil-commentary-mode))
-
-#+end_src
-
 * WhichKey
 #+begin_src emacs-lisp
 
@@ -708,7 +672,7 @@ named arguments:
 ;; Configure directory extension.
 (use-package vertico-directory
   :after vertico
-  :ensure nil
+  :straight nil
   ;; More convenient directory navigation commands
   :bind (:map vertico-map
               ("RET" . vertico-directory-enter)
@@ -724,7 +688,7 @@ named arguments:
 ;;   (setq vertico-posframe-min-width 100))
 
 (use-package savehist
-  :ensure nil
+  :straight nil
   :init
   (savehist-mode)
   :config
@@ -826,7 +790,7 @@ named arguments:
 ;;   (corfu-quit-no-match 'separator)
 ;;   (corfu-preselect-first nil)
 ;;   :config
-;;   ;; Ensure corfu is used for all in-region completions
+;;   ;; Straight corfu is used for all in-region completions
 ;;   ;; (setq completion-in-region-function #'corfu-completion-in-region)
 ;;   )
 
@@ -863,7 +827,7 @@ named arguments:
 
 (use-package corfu-doc
   ;; NOTE 2022-02-05: At the time of writing, `corfu-doc' is not yet on melpa
-  :ensure (:host github :repo "galeo/corfu-doc")
+  :straight (:host github :repo "galeo/corfu-doc")
   :after corfu
   :hook (corfu-mode . corfu-doc-mode)
   :general (:keymaps 'corfu-map
@@ -905,7 +869,7 @@ named arguments:
   (visual-line-mode 1))
 
 (use-package org
-  :ensure nil
+  :straight nil
   :hook (org-mode . custom/org-mode-setup))
 
 (use-package org-modern
@@ -976,7 +940,7 @@ named arguments:
   (TeX-view))
 
 (use-package pdf-tools
-  :ensure t
+  :straight t
   :config
   (pdf-tools-install) ;; automatically sets up pdf-tools
   ;; (setq-default pdf-view-display-size 'fit-page)
@@ -1000,7 +964,7 @@ named arguments:
 #+begin_src emacs-lisp
 
 (use-package doom-modeline
-  :ensure t
+  :straight t
   :init (doom-modeline-mode 1)
   :config
   ;; Optional tweaks to mimic Doom Emacs exactly
@@ -1155,14 +1119,14 @@ named arguments:
 
 ;; Consult integration with LSP
 (use-package consult-lsp
-  :ensure t
+  :straight t
   :after (lsp-mode consult)
   :config
   (define-key lsp-mode-map [remap xref-find-apropos] #'consult-lsp-symbols))
 
 ;; Flycheck integration with LSP
 (use-package flycheck
-  :ensure t
+  :straight t
   :hook (prog-mode . flycheck-mode)
   :config
   (setq flycheck-check-syntax-automatically '(save mode-enabled))
@@ -1183,7 +1147,7 @@ named arguments:
 
 ;; Python-specific LSP configuration
 (use-package lsp-pyright
-  :ensure t
+  :straight t
   :hook (python-mode . (lambda ()
                          (require 'lsp-pyright)
                          (lsp-deferred)))
@@ -1198,7 +1162,7 @@ named arguments:
 
 ;; Python mode configuration
 (use-package python
-  :ensure nil
+  :straight nil
   :mode ("\\.py\\'" . python-mode)
   :config
   ;; Python interpreter settings
@@ -1218,7 +1182,7 @@ named arguments:
 
 ;; Python environment management
 (use-package pyvenv
-  :ensure t
+  :straight t
   :hook (python-mode . pyvenv-mode)
   :config
   (setq pyvenv-mode-line-indicator '(pyvenv-virtual-env-name ("[venv:" pyvenv-virtual-env-name "] ")))
@@ -1234,14 +1198,14 @@ named arguments:
 
 ;; Python testing support
 (use-package python-pytest
-  :ensure t
+  :straight t
   :after python
   :config
   (setq python-pytest-executable "pytest"))
 
 ;; Python formatting with Black
 (use-package python-black
-  :ensure t
+  :straight t
   :after python
   :hook (python-mode . python-black-on-save-mode-enable-dwim)
   :config
@@ -1250,19 +1214,19 @@ named arguments:
 
 ;; Python docstring support
 (use-package python-docstring
-  :ensure t
+  :straight t
   :hook (python-mode . python-docstring-mode))
 
 ;; Import sorting with isort
 (use-package py-isort
-  :ensure t
+  :straight t
   :after python
   :hook (python-mode . (lambda ()
                          (add-hook 'before-save-hook #'py-isort-before-save nil t))))
 
 ;; Python debugging support
 (use-package dap-mode
-  :ensure t
+  :straight t
   :after lsp-mode
   :config
   (require 'dap-python)
@@ -1284,7 +1248,7 @@ named arguments:
 
 ;; C/C++ mode configuration
 (use-package cc-mode
-  :ensure nil
+  :straight nil
   :mode (("\\.c\\'" . c-mode)
          ("\\.cpp\\'" . c++-mode)
          ("\\.cc\\'" . c++-mode)
@@ -1312,18 +1276,18 @@ named arguments:
 
 ;; CMake integration
 (use-package cmake-mode
-  :ensure t
+  :straight t
   :mode (("CMakeLists\\.txt\\'" . cmake-mode)
          ("\\.cmake\\'" . cmake-mode)))
 
 (use-package cmake-font-lock
-  :ensure t
+  :straight t
   :after cmake-mode
   :hook (cmake-mode . cmake-font-lock-activate))
 
 ;; C/C++ formatting with clang-format
 (use-package clang-format
-  :ensure t
+  :straight t
   :after cc-mode
   :config
   (setq clang-format-style "file")  ;; Use .clang-format file
@@ -1341,12 +1305,12 @@ named arguments:
 
 ;; Modern C++ font-lock
 (use-package modern-cpp-font-lock
-  :ensure t
+  :straight t
   :hook (c++-mode . modern-c++-font-lock-mode))
 
 ;; CMake build integration
 (use-package cmake-project
-  :ensure t
+  :straight t
   :after cc-mode
   :config
   (defun my/cmake-project-configure ()
@@ -1388,7 +1352,7 @@ named arguments:
 
 ;; Company backend for C/C++ headers
 (use-package company-c-headers
-  :ensure t
+  :straight t
   :after company
   :config
   (add-to-list 'company-backends 'company-c-headers)
@@ -1399,7 +1363,7 @@ named arguments:
 
 ;; Disaster: show assembly for C/C++
 (use-package disaster
-  :ensure t
+  :straight t
   :after cc-mode
   :commands disaster)
 
@@ -1410,7 +1374,7 @@ named arguments:
 
 ;; ── LSP Java (Eclipse JDT Language Server) ──
 (use-package lsp-java
-  :ensure t
+  :straight t
   :after lsp-mode
   :config
   ;; ── Java runtime and server settings ──
@@ -1473,7 +1437,7 @@ named arguments:
 
 ;; ── DAP mode for Java debugging ──
 (use-package dap-java
-  :ensure nil
+  :straight nil
   :after (lsp-java dap-mode)
   :config
   ;; ── Java debug configurations ──
@@ -1502,19 +1466,19 @@ named arguments:
 
 ;; ── Spring Boot support (optional) ──
 (use-package lsp-java-boot
-  :ensure nil
+  :straight nil
   :after lsp-java
   :config
   (lsp-java-boot-lens-mode 1))
 
 ;; ── Maven support ──
 (use-package mvn
-  :ensure t
+  :straight t
   :commands (mvn-clean mvn-compile mvn-test))
 
 ;; ── Gradle support ──
 (use-package gradle-mode
-  :ensure t
+  :straight t
   :hook (java-mode . gradle-mode)
   :config
   (setq gradle-use-gradlew t))
@@ -1600,7 +1564,7 @@ named arguments:
 ;;   (setq indent-guide-char "│"))
 
 (use-package highlight-indent-guides
-  :ensure t
+  :straight t
   :hook (prog-mode . highlight-indent-guides-mode)
   :config
   (setq highlight-indent-guides-method 'character)
@@ -1631,10 +1595,10 @@ named arguments:
 #+begin_src emacs-lisp
 
 (use-package vterm
-  :ensure t)
+  :straight t)
 
 (use-package vterm-toggle
-  :ensure t
+  :straight t
   :after vterm
   :config
   (setq vterm-toggle-fullscreen-p nil)
@@ -1676,7 +1640,7 @@ Settings
 #+begin_src emacs-lisp
 
 (use-package hideshow
-  :ensure nil  ; Built-in package
+  :straight nil  ; Built-in package
   :hook (prog-mode . hs-minor-mode)
   :config
   ;; Hide the indicators on the left fringe
