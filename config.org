@@ -13,7 +13,10 @@
 - [[#file-organization--cleanup][File Organization & Cleanup]]
 - [[#themes][Themes]]
 - [[#evil-mode][Evil Mode]]
-- [[#general-key-bindings][General Key Bindings]]
+- [[#window-management][Window Management]]
+  - [[#ace-window][Ace Window]]
+  - [[#zoom][Zoom]]
+- [[#general-key-bindings][general Key Bindings]]
 - [[#customization-of-frame-alist][Customization of Frame Alist]]
 - [[#whichkey][WhichKey]]
 - [[#vertico][Vertico]]
@@ -395,7 +398,31 @@
 
 #+end_src
 
-* General Key Bindings
+* Window Management
+** Ace Window
+#+begin_src emacs-lisp
+
+(use-package ace-window
+  :straight t
+  :init
+  (setq aw-keys '(?1 ?2 ?3 ?4 ?5 ?6 ?7 ?8 ?9)
+        aw-scope 'frame
+        aw-dispatch-always nil))
+
+#+end_src
+
+** Zoom
+#+begin_src emacs-lisp
+
+(use-package zoom
+  :straight t
+  :config
+  (setq zoom-size '(0.618 . 0.618)) ;; golden ratio size
+  (zoom-mode 1))
+
+#+end_src
+
+* general Key Bindings
 #+begin_src emacs-lisp
 
 (use-package general
@@ -652,8 +679,8 @@
   (wk/leader-keys
     "w" '(:ignore t :wk "Windows")
     ;; Window splits
-    "w c" '(evil-window-delete :wk "Close window")
-    "w n" '(evil-window-new :wk "New window")
+    "w c" '(ace-delete-window :wk "Close window")
+    "w n" '(evil-window-vnew :wk "New empty window")
     "w s" '(evil-window-split :wk "Horizontal split window")
     "w v" '(evil-window-vsplit :wk "Vertical split window")
     ;; Window motions
@@ -661,20 +688,23 @@
     "w j" '(evil-window-down :wk "Window down")
     "w k" '(evil-window-up :wk "Window up")
     "w l" '(evil-window-right :wk "Window right")
-    "w w" '(evil-window-next :wk "Goto next window")
+    "w w" '(ace-window :wk "Ace select window")
+    ;; Ace-window
+    "w x" '(ace-swap-window :wk "Swap windows")
+    "w m" '(delete-other-windows :wk "Maximize window")
+    "w d" '(ace-delete-other-windows :wk "Delete other windows")
     ;; Move Windows
     "w H" '(buf-move-left :wk "Buffer move left")
     "w J" '(buf-move-down :wk "Buffer move down")
     "w K" '(buf-move-up :wk "Buffer move up")
     "w L" '(buf-move-right :wk "Buffer move right"))
-
-
+  
   (wk/leader-keys
     "y" '(:ignore t :wk "YASnippets")
     "y n" '(yas-new-snippet :wk "Create new YASnippet"))
   )
 
-  #+end_src
+#+end_src
 * Customization of Frame Alist
 #+begin_src emacs-lisp
 
