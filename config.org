@@ -84,17 +84,21 @@
 
 #+end_src
 
-** Auto
+** Reproducible package versions
+Package versions are *pinned* in =straight/versions/default.el= (created with
+=M-x straight-freeze-versions=), so the same commits are checked out on every
+machine and startup.  This replaces =auto-package-update= — a =package.el= tool
+that does not cooperate with straight.el and silently pulls breaking upstream
+changes.
+
+To update deliberately:
+- =M-x straight-pull-all= — fetch/checkout the latest for every package
+- =M-x straight-freeze-versions= — re-pin the lockfile to the new commits
+
 #+begin_src emacs-lisp
 
-(use-package auto-package-update
-  :custom
-  (auto-package-update-interval 7)
-  (auto-package-update-prompt-before-update t)
-  (auto-package-update-hide-results t)
-  :config
-  (auto-package-update-maybe)
-  (auto-package-update-at-time "09:00"))
+;; Shallow clones: faster, smaller, and enough for a pinned setup.
+(setq straight-vc-git-default-clone-depth 1)
 
 #+end_src
 
@@ -145,9 +149,14 @@
 (setq global-auto-revert-non-file-buffers t)
 
 ;; ── Warning levels ──
-(setq warning-minimum-level :emergency)
+;; Surface genuine errors in *Warnings* (so latent bugs are visible instead
+;; of hidden until they hard-crash), but keep native-compilation's noisy
+;; async warnings from popping the buffer on every startup.
+(setq warning-minimum-level :error
+      native-comp-async-report-warnings-errors 'silent)
+(add-to-list 'warning-suppress-types '(comp))
 
-;; ── Suppress specific warnings ──
+;; ── Suppress specific byte-compile warnings ──
 (setq byte-compile-warnings '(cl-functions))
 
 ;; ── Environment path integration ──
@@ -1398,10 +1407,9 @@
     (interactive)
     (cmake-project-build-project)))
 
-;; C/C++ debugging with dap-mode
-(use-package dap-mode
-  :after lsp-mode
-  :config
+;; C/C++ debugging — extends the shared dap-mode setup declared once in the
+;; Python LSP section (`with-eval-after-load' avoids a duplicate use-package).
+(with-eval-after-load 'dap-mode
   (require 'dap-lldb)
   (require 'dap-gdb-lldb)
   
@@ -1692,7 +1700,14 @@
 
 (use-package beacon
   :defer t
-  :hook (after-init . beacon-mode))
+  :hook (after-init . beacon-mode)
+  :config
+  ;; A flash of light pinpoints the cursor when you scroll or jump far.
+  (setq beacon-blink-when-window-scrolls t
+        beacon-blink-when-point-moves-vertically 8
+        beacon-size 28
+        beacon-blink-duration 0.25
+        beacon-color "#268bd2"))            ; solarized blue
 
 #+end_src
 
@@ -1771,8 +1786,16 @@ Settings
 
 (use-package track-changes)
 
+(defun +copilot-maybe-enable ()
+  "Enable `copilot-mode' only if the Copilot language server is installed.
+Guards against a missing `@github/copilot-language-server' binary
+aborting the rest of the config.  Run `M-x copilot-install-server' once
+to install it (needs node/npm)."
+  (when (ignore-errors (copilot-server-executable))
+    (copilot-mode 1)))
+
 (use-package copilot
-  :hook (prog-mode . copilot-mode)
+  :hook (prog-mode . +copilot-maybe-enable)
   :bind (:map copilot-completion-map
               ("<tab>" . copilot-accept-completion)
               ("TAB" . copilot-accept-completion)
@@ -1866,7 +1889,10 @@ Settings
   :init
   (projectile-mode +1)
   :config
-  (setq projectile-completion-system 'auto))
+  (setq projectile-completion-system 'auto
+        ;; Where you keep your code: `SPC p p' discovers projects here.
+        projectile-project-search-path '("~/code/" "~/projects/" "~/dev/")
+        projectile-ignored-projects '("~/" "/tmp")))
 
 #+end_src
 
@@ -1889,6 +1915,522 @@ Settings
   ([remap describe-variable] . helpful-variable)
   ([remap describe-key]      . helpful-key)
   ([remap describe-command]  . helpful-command))
+
+#+end_src
+
+* Identity
+#+begin_src emacs-lisp
+
+(setq user-full-name    "Williams Parre"
+      user-mail-address "williamsparre@gmail.com")
+
+#+end_src
+
+* Performance Extras
+#+begin_src emacs-lisp
+
+;; Don't fontify absurdly long lines (e.g. minified JS) — keeps Emacs snappy.
+;; (`read-process-output-max' is already tuned in Basic Settings.)
+(setq-default bidi-paragraph-direction 'left-to-right)
+(setq bidi-inhibit-bpa t)
+
+#+end_src
+
+* Pulsar
+Pulse the current line after navigation / yanks / window changes.
+#+begin_src emacs-lisp
+
+(use-package pulsar
+  :straight t
+  :hook (after-init . pulsar-global-mode)
+  :config
+  (setq pulsar-pulse t
+        pulsar-delay 0.05
+        pulsar-iterations 10
+        pulsar-face 'pulsar-magenta
+        pulsar-highlight-face 'pulsar-cyan)
+  ;; Make Evil motions pulse too.
+  (dolist (fn '(evil-scroll-up evil-scroll-down evil-scroll-page-up
+                evil-scroll-page-down evil-goto-line evil-goto-first-line
+                evil-window-up evil-window-down evil-window-left evil-window-right
+                evil-yank evil-paste-after evil-paste-before))
+    (add-to-list 'pulsar-pulse-functions fn)))
+
+#+end_src
+
+* Rainbow Mode
+Colourize colour codes (#hex, rgb(), named) inline.
+#+begin_src emacs-lisp
+
+(use-package rainbow-mode
+  :straight t
+  :hook ((web-mode css-mode scss-mode sass-mode js-mode js2-mode
+          typescript-mode emacs-lisp-mode help-mode) . rainbow-mode))
+
+#+end_src
+
+* Symbol Overlay
+Highlight every occurrence of the symbol at point and jump between them.
+After =SPC c h=, use n/p to move, e to rename, r to query-replace in the
+transient map.
+#+begin_src emacs-lisp
+
+(use-package symbol-overlay
+  :straight t
+  :defer t)
+
+#+end_src
+
+* GPTel (LLM Chat)
+LLM chat, region rewrites and commit-message help. Open with =SPC o l=.
+Provide a key via the =ANTHROPIC_API_KEY= env var or a =~/.authinfo= line:
+=machine api.anthropic.com login apikey password sk-ant-...=
+#+begin_src emacs-lisp
+
+(use-package gptel
+  :straight t
+  :commands (gptel gptel-send gptel-menu)
+  :config
+  (setq gptel-default-mode 'org-mode)
+  ;; Always register the Claude backend so it's selectable in the menu…
+  (gptel-make-anthropic "Claude"
+    :stream t
+    :key (lambda ()
+           (or (getenv "ANTHROPIC_API_KEY")
+               (ignore-errors (gptel-api-key-from-auth-source "api.anthropic.com")))))
+  ;; …and make it the default when a key is available.
+  (when (or (getenv "ANTHROPIC_API_KEY")
+            (ignore-errors (gptel-api-key-from-auth-source "api.anthropic.com")))
+    (setq gptel-backend (gptel-get-backend "Claude")
+          gptel-model 'claude-sonnet-4-5)))
+
+#+end_src
+
+* LSP Treemacs Nerd Icons
+Crisp, font-based icons for the LSP breadcrumb / symbols / error list (needs the
+"Symbols Nerd Font Mono" font: =M-x nerd-icons-install-fonts=).
+#+begin_src emacs-lisp
+
+(use-package lsp-treemacs-nerd-icons
+  :straight (:host github :repo "Velnbur/lsp-treemacs-nerd-icons" :files ("*.el"))
+  :after lsp-treemacs
+  :config
+  (setq lsp-treemacs-theme "nerd-icons-ext"))
+
+#+end_src
+
+* Web / JavaScript / TypeScript
+2-space indent everywhere, and web-mode for markup/template files.
+#+begin_src emacs-lisp
+
+(use-package web-mode
+  :straight t
+  :mode ("\\.html?\\'" "\\.vue\\'" "\\.jsx\\'" "\\.tsx\\'" "\\.php\\'"
+         "\\.erb\\'" "\\.hbs\\'")
+  :config
+  (setq web-mode-markup-indent-offset 2
+        web-mode-css-indent-offset 2
+        web-mode-code-indent-offset 2))
+
+(use-package typescript-mode
+  :straight t
+  :mode "\\.ts\\'"
+  :config
+  (setq typescript-indent-level 2))
+
+(with-eval-after-load 'js
+  (setq js-indent-level 2))          ; also governs .json via js-mode
+
+#+end_src
+
+* Markdown
+#+begin_src emacs-lisp
+
+(use-package markdown-mode
+  :straight t
+  :mode (("README\\.md\\'" . gfm-mode)
+         ("\\.md\\'" . markdown-mode)
+         ("\\.markdown\\'" . markdown-mode))
+  :init
+  (setq markdown-fontify-code-blocks-natively t))
+
+#+end_src
+
+* LaTeX Enhancements
+Fast math entry (=laas=), Evil text objects for TeX (=evil-tex=), RefTeX,
+in-Emacs PDF sizing, and prose niceties. Builds on the AUCTeX setup above.
+#+begin_src emacs-lisp
+
+;; LaTeX-Auto-Activating-Snippets: type math the way you say it ("sr" -> "^2",
+;; "@a" -> "\alpha"), only inside math environments.
+(use-package laas
+  :straight t
+  :hook (LaTeX-mode . laas-mode))
+
+;; Evil text objects for LaTeX: e.g. `cie' (change inside environment),
+;; `dim' (delete inside math), `tsd' (toggle surrounding delimiter).
+(use-package evil-tex
+  :straight t
+  :hook (LaTeX-mode . evil-tex-mode))
+
+;; RefTeX: cross-references, labels and citations.
+(add-hook 'LaTeX-mode-hook #'turn-on-reftex)
+(with-eval-after-load 'reftex
+  (setq reftex-plug-into-AUCTeX t
+        reftex-cite-format 'biblatex           ; modern \autocite{...}
+        reftex-default-bibliography '("~/org/bib/references.bib")))
+
+;; Bigger inline math previews (C-c C-p C-p).
+(with-eval-after-load 'latex
+  (setq preview-scale-function 1.4))
+
+;; Prose niceties only in LaTeX buffers: soft word-wrap + outline folding.
+(add-hook 'LaTeX-mode-hook #'visual-line-mode)
+(add-hook 'LaTeX-mode-hook #'outline-minor-mode)
+
+;; PDF viewing: fit page width, smooth resize.
+(with-eval-after-load 'pdf-view
+  (setq-default pdf-view-display-size 'fit-width)
+  (setq pdf-view-resize-factor 1.1))
+
+#+end_src
+
+* Quickrun
+One-keystroke "run this buffer" for many languages (bound to =F8=).
+#+begin_src emacs-lisp
+
+(use-package quickrun
+  :straight t
+  :commands (quickrun quickrun-region quickrun-shell))
+
+#+end_src
+
+* Competitive Programming
+A local "compile-and-run" workflow. Drop an =input.txt= next to your source and
+it is fed to the program on stdin; =output.txt= mirrors stdout live. See the
+function-key bindings in *Competitive Programming Keybindings* below.
+#+begin_src emacs-lisp
+
+(defvar +cp-cxx-standard "c++20"
+  "C++ standard used by the competitive-programming runner.")
+(defvar +cp-c-standard "c17"
+  "C standard used by the competitive-programming runner.")
+(defvar +cp-build-flags "-Wall -Wextra -Wshadow -O2 -DLOCAL"
+  "Extra compiler flags for the competitive-programming runner.")
+(defvar +cp-cxx-include-dir (expand-file-name "~/.config/cpp/include")
+  "Include dir holding a libc++-compatible <bits/stdc++.h> for C++ builds.
+macOS Clang/libc++ lacks GCC's <bits/stdc++.h>; this dir provides it.")
+(defvar +cp-write-output-file t
+  "When non-nil, tee the program's stdout into `output.txt' beside the source.
+This is what keeps the bottom-right pane of `+cp/layout' live after every run.")
+
+;; The starter skeleton used by `+cp/new-problem'. One entry per language; the
+;; right one is chosen from the current buffer's major mode (C++ is the default).
+(defvar +cp-templates
+  `((c++-mode . ,(concat "#include <bits/stdc++.h>\n"
+                         "using namespace std;\n"
+                         "\n"
+                         "#define all(x) (x).begin(), (x).end()\n"
+                         "#define sz(x) (int)(x).size()\n"
+                         "using ll = long long;\n"
+                         "using pii = pair<int,int>;\n"
+                         "\n"
+                         "void solve() {\n"
+                         "    \n"
+                         "}\n"
+                         "\n"
+                         "int main() {\n"
+                         "    ios::sync_with_stdio(false);\n"
+                         "    cin.tie(nullptr);\n"
+                         "    int t = 1;\n"
+                         "    // cin >> t;\n"
+                         "    while (t--) solve();\n"
+                         "    return 0;\n"
+                         "}\n"))
+    (python-mode . ,(concat "import sys\n"
+                            "input = sys.stdin.readline\n"
+                            "\n"
+                            "def solve():\n"
+                            "    pass\n"
+                            "\n"
+                            "def main():\n"
+                            "    t = 1\n"
+                            "    # t = int(input())\n"
+                            "    for _ in range(t):\n"
+                            "        solve()\n"
+                            "\n"
+                            "if __name__ == \"__main__\":\n"
+                            "    main()\n")))
+  "Alist of (MAJOR-MODE . TEMPLATE-STRING) for `+cp/new-problem'.")
+
+(defun +cp--stdin-suffix (dir)
+  "Return a ` < input.txt' shell suffix if that file exists in DIR, else \"\"."
+  (let ((in (expand-file-name "input.txt" dir)))
+    (if (file-exists-p in)
+        (format " < %s" (shell-quote-argument in))
+      "")))
+
+(defun +cp/compile-and-run ()
+  "Build and run the current file. Acts as a universal F5 \"build\" key.
+
+In LaTeX buffers it runs the full latexmk build. In C/C++/Python/Java buffers
+it compiles (when needed) and runs the program, piping `input.txt' on stdin
+when that file is present beside the source."
+  (interactive)
+  (when buffer-file-name (save-buffer))
+  (pcase major-mode
+    ((or 'latex-mode 'LaTeX-mode)
+     (TeX-command-run-all nil))
+    ((guard (null buffer-file-name))
+     (user-error "Buffer is not visiting a file"))
+    (_
+     (let* ((file  (file-name-nondirectory buffer-file-name))
+            (base  (file-name-sans-extension file))
+            (dir   (file-name-directory buffer-file-name))
+            (stdin (+cp--stdin-suffix dir))
+            (qbase (shell-quote-argument base))
+            (qfile (shell-quote-argument file))
+            (cmd
+             (pcase major-mode
+               ((or 'c++-mode 'c++-ts-mode)
+                (format "g++ -std=%s %s -I%s -o %s %s && ./%s%s"
+                        +cp-cxx-standard +cp-build-flags
+                        (shell-quote-argument +cp-cxx-include-dir)
+                        qbase qfile qbase stdin))
+               ((or 'c-mode 'c-ts-mode)
+                (format "gcc -std=%s %s -o %s %s && ./%s%s"
+                        +cp-c-standard +cp-build-flags qbase qfile qbase stdin))
+               ((or 'python-mode 'python-ts-mode)
+                (format "python3 %s%s" qfile stdin))
+               ((or 'java-mode 'java-ts-mode)
+                (format "javac %s && java %s%s" qfile qbase stdin))
+               (_ (user-error "No competitive runner for %s" major-mode)))))
+       ;; Mirror the program's stdout into `output.txt' (the layout's bottom-right
+       ;; pane) while still showing it in the *compilation* buffer. `&&' binds
+       ;; tighter than `|', so tee only ever wraps the final run command.
+       (when +cp-write-output-file
+         (setq cmd (format "%s | tee %s" cmd
+                           (shell-quote-argument
+                            (expand-file-name "output.txt" dir)))))
+       ;; Force the run log into the layout's output pane (overriding popups)
+       ;; so it shows there, then flips back to output.txt on success.
+       (let* ((default-directory dir)
+              (compilation-scroll-output t)
+              (owin (+cp--output-window))
+              (display-buffer-overriding-action
+               (if owin
+                   (list (lambda (buf _alist)
+                           (with-current-buffer buf
+                             (setq-local +cp--in-output-window t))
+                           (set-window-buffer owin buf)
+                           owin))
+                 display-buffer-overriding-action)))
+         (compile cmd))))))
+
+(defun +cp/edit-input ()
+  "Open (creating if needed) `input.txt' beside the current file in a side window."
+  (interactive)
+  (unless buffer-file-name (user-error "Buffer is not visiting a file"))
+  (let ((in (expand-file-name "input.txt" (file-name-directory buffer-file-name))))
+    (find-file-other-window in)))
+
+(defun +cp--touch (file)
+  "Create FILE on disk if it does not exist yet, and return FILE."
+  (unless (file-exists-p file)
+    (write-region "" nil file nil 'silent))
+  file)
+
+(defun +cp--truncate (file)
+  "Empty FILE on disk and refresh any buffer visiting it."
+  (write-region "" nil file nil 'silent)
+  (when-let ((buf (find-buffer-visiting file)))
+    (with-current-buffer buf (revert-buffer t t t))))
+
+(defun +cp/layout ()
+  "Lay out the competitive-programming IDE: source left, I/O stacked right.
+
+The current source file fills the left half; `input.txt' (top) and `output.txt'
+\(bottom) sit in the right half. Both side files are created if missing, and the
+output pane auto-reverts so each run's result shows up immediately."
+  (interactive)
+  (unless buffer-file-name (user-error "Buffer is not visiting a file"))
+  (let* ((dir    (file-name-directory buffer-file-name))
+         (input  (+cp--touch (expand-file-name "input.txt"  dir)))
+         (output (+cp--touch (expand-file-name "output.txt" dir)))
+         (src    (current-buffer)))
+    (delete-other-windows)
+    (let ((right (split-window-right)))
+      (with-selected-window right
+        (find-file input)
+        (with-selected-window (split-window-below)
+          (find-file output)
+          (auto-revert-mode 1))))   ; live-refresh output.txt after runs
+    ;; Land back on the source, sized to the golden ratio by zoom-mode.
+    (select-window (get-buffer-window src))))
+
+(defun +cp/new-problem ()
+  "Reset the buffer to its language template and clear `input.txt'/`output.txt'.
+One keypress to start a fresh problem. Asks for confirmation first."
+  (interactive)
+  (unless buffer-file-name (user-error "Buffer is not visiting a file"))
+  (when (yes-or-no-p "New problem — reset this file and clear input/output? ")
+    (let* ((dir  (file-name-directory buffer-file-name))
+           (mode (pcase major-mode
+                   ((or 'c++-mode 'c++-ts-mode 'c-mode 'c-ts-mode) 'c++-mode)
+                   ((or 'python-mode 'python-ts-mode) 'python-mode)
+                   (m m)))
+           (tmpl (alist-get mode +cp-templates)))
+      (unless tmpl (user-error "No template for %s" major-mode))
+      (erase-buffer)
+      (insert tmpl)
+      (save-buffer)
+      (+cp--truncate (expand-file-name "input.txt"  dir))
+      (+cp--truncate (expand-file-name "output.txt" dir))
+      ;; Drop the cursor inside solve() (or its first blank body line).
+      (goto-char (point-min))
+      (when (re-search-forward "solve()\\s-*[:{]\n" nil t)
+        (end-of-line)
+        (when (memq mode '(c++-mode)) (indent-for-tab-command)))
+      (message "Fresh problem ready."))))
+
+(defun +cp--revert-output-buffers (&rest _)
+  "Refresh any visible `output.txt' buffer after a compile finishes."
+  (dolist (buf (buffer-list))
+    (let ((f (buffer-file-name buf)))
+      (when (and f (string= (file-name-nondirectory f) "output.txt")
+                 (file-exists-p f))
+        (with-current-buffer buf (revert-buffer t t t))))))
+(add-hook 'compilation-finish-functions #'+cp--revert-output-buffers)
+
+;; Run log that lives in the output pane. When you build, the bottom-right pane
+;; (showing `output.txt') is reused to display the *compilation* log. A few
+;; seconds after a CLEAN build the pane flips back to the saved file; on a
+;; compile ERROR the log stays put so you can read the diagnostics.
+(defvar +cp-compilation-popup-timeout 3
+  "Seconds the run log stays in the output pane before flipping back to the file.
+Set to nil to keep the log up until your next build.")
+
+(defvar-local +cp--in-output-window nil
+  "Non-nil in a *compilation* buffer shown inside the layout's output pane.")
+
+(defun +cp--output-window ()
+  "Return the window currently showing an `output.txt' file, if any."
+  (seq-find (lambda (w)
+              (let ((f (buffer-file-name (window-buffer w))))
+                (and f (string= (file-name-nondirectory f) "output.txt"))))
+            (window-list)))
+
+(defun +cp--restore-output-window (buf status)
+  "Flip the output pane from the run log BUF back to `output.txt' after success."
+  (when (and +cp-compilation-popup-timeout
+             (bufferp buf)
+             (buffer-local-value '+cp--in-output-window buf)
+             (stringp status)
+             (string-match-p "finished" status))
+    (let ((dir (buffer-local-value 'default-directory buf)))
+      (run-at-time
+       +cp-compilation-popup-timeout nil
+       (lambda ()
+         (when-let ((win (get-buffer-window buf)))
+           (let* ((out  (expand-file-name "output.txt" dir))
+                  (obuf (or (find-buffer-visiting out)
+                            (and (file-exists-p out) (find-file-noselect out)))))
+             (when obuf
+               (with-current-buffer obuf
+                 (when (file-exists-p out) (revert-buffer t t t)))
+               (set-window-buffer win obuf)))))))))
+(add-hook 'compilation-finish-functions #'+cp--restore-output-window)
+
+#+end_src
+
+* CPH — Competitive Programming Helper
+My local package in =lisp/cph.el=: a listener for the *Competitive Companion*
+browser extension. Click its green "+" on a problem page and Emacs auto-creates
+the source file from a template, stores every sample testcase, and pops a
+results panel; =cph/run-all= compiles once and runs every test with
+AC/WA/TLE/RE/CE verdicts (stderr is kept separate, so =-DLOCAL= debug prints
+never cause a false Wrong Answer).
+#+begin_src emacs-lisp
+
+(add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory))
+
+(use-package cph
+  :straight nil
+  :commands (cph-mode cph/run-all cph/panel cph/edit-tests cph/add-test
+             cph/new-problem cph/open-results cph/start-server cph/stop-server)
+  :init
+  ;; Create received problems in the current working directory (the focused
+  ;; Dired/file buffer's dir); sample tests go in a sibling `.cph/'. Toolchain
+  ;; mirrors the +cp workflow above.
+  (setq cph-use-current-directory t
+        cph-group-subdirs nil
+        cph-directory (expand-file-name "~/cp")
+        cph-template-files '(("cpp" . "~/cp/template.cpp"))
+        cph-cxx-standard +cp-cxx-standard
+        cph-c-standard +cp-c-standard
+        cph-build-flags +cp-build-flags
+        cph-cxx-include-dir +cp-cxx-include-dir)
+  ;; Start the browser listener once Emacs is up and idle.
+  (run-with-idle-timer 1 nil (lambda () (cph-mode 1))))
+
+#+end_src
+
+* Org Extras
+#+begin_src emacs-lisp
+
+(setq org-directory "~/org/")
+(with-eval-after-load 'org
+  (setq org-startup-folded 'content
+        org-log-done 'time))
+
+#+end_src
+
+* Competitive Programming Keybindings
+IDE-style function keys plus discoverable leader entries. These are all *new*
+bindings — nothing existing is rebound. The =SPC c= (code) prefix gains symbol
+highlighting, build/run and a =SPC c p= cph sub-menu; =SPC o l= opens gptel;
+=SPC t z= / =SPC t B= toggle zoom / beacon.
+#+begin_src emacs-lisp
+
+;; IDE-style function keys (work in any supported language):
+(global-set-key (kbd "<f5>")   #'+cp/compile-and-run) ; build & run (latexmk in TeX)
+(global-set-key (kbd "<f6>")   #'recompile)           ; re-run the last compile
+(global-set-key (kbd "<f7>")   #'+cp/edit-input)      ; open/edit input.txt
+(global-set-key (kbd "<f8>")   #'quickrun)            ; quick scratch run
+(global-set-key (kbd "<f9>")   #'+cp/layout)          ; source + I/O 3-pane layout
+(global-set-key (kbd "<f12>")  #'+cp/new-problem)     ; reset to template
+;; CPH (multi-testcase, Competitive Companion). Shift mirrors the F-keys:
+(global-set-key (kbd "S-<f5>") #'cph/run-all)         ; run ALL sample testcases
+(global-set-key (kbd "S-<f9>") #'cph/panel)           ; source | results split
+
+;; Symbol-overlay jump motions (new ] / [ pairs).
+(with-eval-after-load 'evil
+  (define-key evil-normal-state-map (kbd "]h") #'symbol-overlay-jump-next)
+  (define-key evil-normal-state-map (kbd "[h") #'symbol-overlay-jump-prev))
+
+;; New leader entries (general is already loaded; existing keys are untouched).
+(wk/leader-keys
+  ;; --- code (SPC c ...) : symbol highlight + competitive build/run ---
+  "c h"   '(symbol-overlay-put :wk "Highlight symbol (toggle)")
+  "c H"   '(symbol-overlay-remove-all :wk "Clear all highlights")
+  "c RET" '(+cp/compile-and-run :wk "Build & run (F5)")
+  "c L"   '(+cp/layout :wk "Competitive layout (F9)")
+  "c N"   '(+cp/new-problem :wk "New problem / reset (F12)")
+  ;; --- cph sub-menu (SPC c p ...) ---
+  "c p"   '(:ignore t :wk "cph")
+  "c p r" '(cph/run-all :wk "Run all testcases")
+  "c p p" '(cph/panel :wk "Source | results")
+  "c p e" '(cph/edit-tests :wk "Edit testcases")
+  "c p a" '(cph/add-test :wk "Add a testcase")
+  "c p n" '(cph/new-problem :wk "New problem")
+  "c p o" '(cph/open-results :wk "Open results panel")
+  "c p s" '(cph/start-server :wk "Start CC listener")
+  "c p S" '(cph/stop-server :wk "Stop CC listener")
+  ;; --- open (SPC o ...) : LLM chat ---
+  "o l"   '(gptel :wk "LLM chat (gptel)")
+  ;; --- toggles (SPC t ...) ---
+  "t z"   '(zoom-mode :wk "Zoom (auto-balance)")
+  "t B"   '(beacon-mode :wk "Beacon"))
 
 #+end_src
 

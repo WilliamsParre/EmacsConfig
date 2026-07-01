@@ -2,3 +2,10 @@
 !.gitignore
 !config.org
 !init.el
+!lisp/
+!lisp/*.el
+# Track the straight.el version lockfile for reproducible package installs.
+!straight/
+straight/*
+!straight/versions/
+!straight/versions/*.el
